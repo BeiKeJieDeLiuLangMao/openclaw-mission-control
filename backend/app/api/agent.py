@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from enum import Enum
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
@@ -20,8 +21,8 @@ from app.core.agent_auth import AgentAuthContext, get_agent_auth_context
 from app.db.pagination import paginate
 from app.db.session import get_session
 from app.models.agents import Agent
-from app.models.boards import Board
 from app.models.board_webhook_payloads import BoardWebhookPayload
+from app.models.boards import Board
 from app.models.tags import Tag
 from app.models.task_dependencies import TaskDependency
 from app.models.tasks import Task
@@ -167,6 +168,53 @@ def _agent_board_openapi_hints(
         ],
         "x-routing-policy-examples": routing_examples,
     }
+
+
+def _truncate_preview(raw: str, max_chars: int) -> str:
+    if len(raw) <= max_chars:
+        return raw
+    if max_chars <= 3:
+        return raw[:max_chars]
+    return f"{raw[: max_chars - 3]}..."
+
+
+def _payload_preview_with_limit(
+    value: dict[str, object] | list[object] | str | int | float | bool | None,
+    *,
+    max_chars: int,
+) -> tuple[str, bool]:
+    if isinstance(value, str):
+        return _truncate_preview(value, max_chars), len(value) > max_chars
+
+    try:
+        # Stream JSON chunks so we can stop once we know truncation is required.
+        encoder = json.JSONEncoder(ensure_ascii=True)
+        parts: list[str] = []
+        current_len = 0
+        truncated = False
+        for chunk in encoder.iterencode(value):
+            remaining = (max_chars + 1) - current_len
+            if remaining <= 0:
+                truncated = True
+                break
+            if len(chunk) <= remaining:
+                parts.append(chunk)
+                current_len += len(chunk)
+                continue
+            parts.append(chunk[:remaining])
+            current_len += remaining
+            truncated = True
+            break
+        raw = "".join(parts)
+    except TypeError:
+        raw = str(value)
+        return _truncate_preview(raw, max_chars), len(raw) > max_chars
+
+    if len(raw) > max_chars:
+        truncated = True
+    if not truncated:
+        return raw, False
+    return _truncate_preview(raw, max_chars), True
 
 
 def _guard_board_access(agent_ctx: AgentAuthContext, board: Board) -> None:
@@ -578,6 +626,29 @@ async def list_tags(
     "/boards/{board_id}/webhooks/{webhook_id}/payloads/{payload_id}",
     response_model=BoardWebhookPayloadRead,
     tags=AGENT_BOARD_TAGS,
+    openapi_extra=_agent_board_openapi_hints(
+        intent="agent_board_webhook_payload_read",
+        when_to_use=[
+            "Agent needs to inspect a previously captured webhook payload for this board.",
+            "Agent is reconciling missed webhook events or deduping inbound processing.",
+        ],
+        routing_examples=[
+            {
+                "input": {
+                    "intent": "inspect stored webhook payload by id",
+                    "required_privilege": "any_agent",
+                },
+                "decision": "agent_board_webhook_payload_read",
+            },
+            {
+                "input": {
+                    "intent": "list tasks for planning",
+                    "required_privilege": "any_agent",
+                },
+                "decision": "agent_board_task_discovery",
+            },
+        ],
+    ),
 )
 async def get_webhook_payload(
     webhook_id: UUID,
@@ -589,7 +660,7 @@ async def get_webhook_payload(
 ) -> BoardWebhookPayloadRead:
     """Fetch a stored webhook payload (agent-accessible, read-only).
 
-    This enables lead agents to backfill dropped webhook events and enforce
+    This enables board-scoped agents to backfill dropped webhook events and enforce
     idempotency by inspecting previously received payloads.
 
     If `max_chars` is provided and the serialized payload exceeds the limit,
@@ -611,17 +682,9 @@ async def get_webhook_payload(
 
     response = BoardWebhookPayloadRead.model_validate(payload, from_attributes=True)
     if max_chars is not None and response.payload is not None:
-        import json
-
-        try:
-            raw = json.dumps(response.payload, ensure_ascii=True)
-        except TypeError:
-            raw = str(response.payload)
-        if len(raw) > max_chars:
-            if max_chars <= 3:
-                response.payload = raw[:max_chars]
-            else:
-                response.payload = f"{raw[: max_chars - 3]}..."
+        preview, was_truncated = _payload_preview_with_limit(response.payload, max_chars=max_chars)
+        if was_truncated:
+            response.payload = preview
 
     return response
 

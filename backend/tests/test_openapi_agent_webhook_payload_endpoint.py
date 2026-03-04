@@ -13,3 +13,4 @@ def test_openapi_includes_agent_webhook_payload_read_endpoint() -> None:
     op = schema["paths"][path]["get"]
     tags = set(op.get("tags", []))
     assert "agent-worker" in tags
+    assert op.get("x-llm-intent") == "agent_board_webhook_payload_read"

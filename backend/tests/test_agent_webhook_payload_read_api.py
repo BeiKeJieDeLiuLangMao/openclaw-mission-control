@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from uuid import UUID, uuid4
 
 import pytest
@@ -56,7 +57,11 @@ def _build_test_app(session_maker: async_sessionmaker[AsyncSession]) -> FastAPI:
     return app
 
 
-async def _seed_payload(session: AsyncSession) -> tuple[str, Board, BoardWebhook, BoardWebhookPayload]:
+async def _seed_payload(
+    session: AsyncSession,
+    *,
+    payload_value: dict[str, object] | list[object] | str | int | float | bool | None = None,
+) -> tuple[str, Board, BoardWebhook, BoardWebhookPayload]:
     token = "test-agent-token-" + uuid4().hex
     token_hash = hash_agent_token(token)
 
@@ -108,7 +113,7 @@ async def _seed_payload(session: AsyncSession) -> tuple[str, Board, BoardWebhook
         id=payload_id,
         board_id=board_id,
         webhook_id=webhook_id,
-        payload={"event": "push", "ref": "refs/heads/master"},
+        payload=payload_value or {"event": "push", "ref": "refs/heads/master"},
         headers={"x-github-event": "push"},
         content_type="application/json",
         source_ip="127.0.0.1",
@@ -163,6 +168,61 @@ async def test_agent_payload_read_rejects_invalid_token() -> None:
             )
 
         assert response.status_code == 401
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_payload_read_truncates_json_preview_with_ellipsis() -> None:
+    engine = await _make_engine()
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    app = _build_test_app(session_maker)
+
+    async with session_maker() as session:
+        payload_value: dict[str, object] = {"event": "push", "ref": "refs/heads/master"}
+        token, board, webhook, payload = await _seed_payload(session, payload_value=payload_value)
+
+    max_chars = 12
+    raw = json.dumps(payload_value, ensure_ascii=True)
+    expected_preview = f"{raw[: max_chars - 3]}..."
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                f"/api/v1/agent/boards/{board.id}/webhooks/{webhook.id}/payloads/{payload.id}",
+                headers={"X-Agent-Token": token},
+                params={"max_chars": max_chars},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["payload"] == expected_preview
+
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_agent_payload_read_truncates_string_preview_without_json_quoting() -> None:
+    engine = await _make_engine()
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    app = _build_test_app(session_maker)
+
+    async with session_maker() as session:
+        token, board, webhook, payload = await _seed_payload(session, payload_value="abcdef")
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get(
+                f"/api/v1/agent/boards/{board.id}/webhooks/{webhook.id}/payloads/{payload.id}",
+                headers={"X-Agent-Token": token},
+                params={"max_chars": 4},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["payload"] == "a..."
 
     finally:
         await engine.dispose()
