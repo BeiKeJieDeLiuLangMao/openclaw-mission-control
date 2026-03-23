@@ -92,6 +92,9 @@ import {
   type listOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGetResponse,
   useListOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGet,
 } from "@/api/generated/org-custom-fields/org-custom-fields";
+import {
+  getAgentStatusApiV1SessionsAgentStatusGet,
+} from "@/api/generated/sessions/sessions";
 import type {
   AgentRead,
   ApprovalRead,
@@ -152,6 +155,17 @@ type Task = Omit<
 };
 
 type Agent = AgentRead & { status: string };
+
+type AgentSessionStatus = "working" | "idle" | "offline";
+
+interface AgentStatusEntry {
+  status: AgentSessionStatus;
+  last_active_at: string | null;
+  session_key: string | null;
+  aborted_last_run: boolean;
+  model: string | null;
+  model_short: string | null;
+}
 
 type TaskComment = TaskCommentRead;
 
@@ -847,6 +861,7 @@ export default function BoardDetailPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatusEntry>>({});
   const [groupSnapshot, setGroupSnapshot] = useState<BoardGroupSnapshot | null>(
     null,
   );
@@ -1967,6 +1982,25 @@ export default function BoardDetailPage() {
     };
   }, [board, boardId, isOrgAdmin, isPageActive, isSignedIn, pushLiveFeed]);
 
+  useEffect(() => {
+    if (!boardId) return;
+    const fetchAgentStatuses = async () => {
+      try {
+        const res = await getAgentStatusApiV1SessionsAgentStatusGet(
+          { board_id: boardId },
+        );
+        if (res.status === 200 && res.data?.agent_statuses) {
+          setAgentStatuses(res.data.agent_statuses as Record<string, AgentStatusEntry>);
+        }
+      } catch {
+        // 失败不影响主界面
+      }
+    };
+    fetchAgentStatuses();
+    const interval = setInterval(fetchAgentStatuses, 15000);
+    return () => clearInterval(interval);
+  }, [boardId]);
+
   const resetForm = () => {
     setTitle("");
     setDescription("");
@@ -2343,18 +2377,15 @@ export default function BoardDetailPage() {
   }, [tasks]);
 
   const sortedAgents = useMemo(() => {
-    const rank = (agent: Agent) => {
-      if (workingAgentIds.has(agent.id)) return 0;
-      if (agent.status === "online") return 1;
-      if (agent.status === "provisioning") return 2;
-      return 3;
-    };
+    const statusOrder = { working: 0, idle: 1, offline: 2 };
     return [...agents].sort((a, b) => {
-      const diff = rank(a) - rank(b);
+      const sa = agentStatuses[a.id]?.status ?? "offline";
+      const sb = agentStatuses[b.id]?.status ?? "offline";
+      const diff = (statusOrder[sa] ?? 2) - (statusOrder[sb] ?? 2);
       if (diff !== 0) return diff;
       return a.name.localeCompare(b.name);
     });
-  }, [agents, workingAgentIds]);
+  }, [agents, agentStatuses]);
 
   const boardLead = useMemo(
     () => agents.find((agent) => agent.is_board_lead) ?? null,
@@ -2911,6 +2942,33 @@ export default function BoardDetailPage() {
     return "Agent";
   };
 
+  const agentModelLabel = (agent: Agent): string | null => {
+    // 1. Try session status model_short (live session data from Gateway)
+    const sessionEntry = agentStatuses[agent.id];
+    if (sessionEntry?.model_short) {
+      return sessionEntry.model_short;
+    }
+    if (sessionEntry?.model) {
+      const parts = sessionEntry.model.split("/");
+      return parts[parts.length - 1];
+    }
+    // 2. Try identity_profile.model
+    if (agent.identity_profile && typeof agent.identity_profile === "object") {
+      const rawModel = (agent.identity_profile as Record<string, unknown>).model;
+      if (typeof rawModel === "string" && rawModel.trim()) {
+        const parts = rawModel.trim().split("/");
+        return parts[parts.length - 1];
+      }
+    }
+    // 3. Fall back to top-level agent.model
+    const topLevelModel = (agent as unknown as Record<string, unknown>).model;
+    if (topLevelModel && typeof topLevelModel === "string" && topLevelModel.trim()) {
+      const parts = topLevelModel.trim().split("/");
+      return parts[parts.length - 1];
+    }
+    return null;
+  };
+
   const formatTaskTimestamp = (value?: string | null) => {
     if (!value) return "—";
     const date = parseApiDatetime(value);
@@ -3285,13 +3343,33 @@ export default function BoardDetailPage() {
                               )}
                             />
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-slate-900">
-                              {agent.name}
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {agentRoleLabel(agent)}
-                            </p>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {(() => {
+                              const s = agentStatuses[agent.id]?.status ?? "offline";
+                              if (s === "working") return (
+                                <span className="relative flex-shrink-0 flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </span>
+                              );
+                              if (s === "idle") return (
+                                <span className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-400" />
+                              );
+                              return <span className="flex-shrink-0 h-2 w-2 rounded-full bg-amber-400" />;
+                            })()}
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">
+                                {agent.name}
+                              </p>
+                              <p className="text-[11px] text-slate-500">
+                                {agentRoleLabel(agent)}
+                              </p>
+                              {agentModelLabel(agent) && (
+                                <p className="text-[10px] text-slate-400 font-mono truncate">
+                                  · {agentModelLabel(agent)}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </button>
                       );

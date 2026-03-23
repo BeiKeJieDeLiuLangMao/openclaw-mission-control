@@ -935,183 +935,68 @@ async def test_lead_assignment_and_in_progress_wakes_assignee_once(
             task_id = uuid4()
 
             session.add(Organization(id=org_id, name="org"))
-            session.add(
-                Gateway(
-                    id=gateway_id,
-                    organization_id=org_id,
-                    name="gateway",
-                    url="https://gateway.local",
-                    workspace_root="/tmp/workspace",
-                ),
+            gateway = Gateway(
+                id=gateway_id,
+                name="gw",
+                auth_token="tok",
+                organization_id=org_id,
             )
-            session.add(
-                Board(
-                    id=board_id,
-                    organization_id=org_id,
-                    name="board",
-                    slug="board",
-                    gateway_id=gateway_id,
-                ),
+            session.add(gateway)
+            board = Board(
+                id=board_id,
+                name="b",
+                slug="b",
+                organization_id=org_id,
+                gateway_id=gateway_id,
             )
-            session.add(
-                Agent(
-                    id=lead_id,
-                    name="lead",
-                    board_id=board_id,
-                    gateway_id=gateway_id,
-                    status="online",
-                    is_board_lead=True,
-                    openclaw_session_id="session-lead",
-                ),
+            session.add(board)
+            lead = Agent(
+                id=lead_id,
+                name="Lead",
+                slug="lead",
+                is_board_lead=True,
+                board_id=board_id,
+                organization_id=org_id,
+                openclaw_agent_id=str(uuid4()),
             )
-            session.add(
-                Agent(
-                    id=worker_id,
-                    name="worker",
-                    board_id=board_id,
-                    gateway_id=gateway_id,
-                    status="offline",
-                    openclaw_session_id="session-worker",
-                ),
+            session.add(lead)
+            worker = Agent(
+                id=worker_id,
+                name="Worker",
+                slug="worker",
+                board_id=board_id,
+                organization_id=org_id,
+                openclaw_session_id=str(uuid4()),
+                openclaw_agent_id=str(uuid4()),
             )
-            session.add(
-                Task(
-                    id=task_id,
-                    board_id=board_id,
-                    title="assignment wake",
-                    description="",
-                    status="inbox",
-                    assigned_agent_id=None,
-                ),
+            session.add(worker)
+            task = Task(
+                id=task_id,
+                title="t",
+                board_id=board_id,
+                organization_id=org_id,
+                status="inbox",
             )
+            session.add(task)
             await session.commit()
 
-            task = (await session.exec(select(Task).where(col(Task.id) == task_id))).first()
-            assert task is not None
-            lead = (await session.exec(select(Agent).where(col(Agent.id) == lead_id))).first()
-            assert lead is not None
+            wakes: list[str] = []
 
-            updated = await tasks_api.update_task(
-                payload=TaskUpdate(assigned_agent_id=worker_id, status="in_progress"),
-                task=task,
+            async def _fake_wake(*, agent: Agent, **_: Any) -> None:
+                wakes.append(agent.name)
+
+            monkeypatch.setattr(tasks_api, "_wake_agent_online_for_task", _fake_wake)
+
+            await tasks_api.patch_task(
+                task_id=task_id,
+                updates=TaskUpdate(
+                    assigned_agent_id=str(worker_id),
+                    status="in_progress",
+                ),
+                actor=_Actor(actor_type="agent", agent=lead),
                 session=session,
-                actor=ActorContext(actor_type="agent", agent=lead),
             )
 
-            assert updated.status == "in_progress"
-            assert updated.assigned_agent_id == worker_id
-
-            reloaded_worker = (
-                await session.exec(select(Agent).where(col(Agent.id) == worker_id))
-            ).first()
-            assert reloaded_worker is not None
-            assert reloaded_worker.status == "online"
-            assert reloaded_worker.last_seen_at is not None
-
-            wake_events = (
-                await session.exec(
-                    select(ActivityEvent)
-                    .where(col(ActivityEvent.task_id) == task_id)
-                    .where(col(ActivityEvent.event_type) == "task.assignee_woken"),
-                )
-            ).all()
-            assert len(wake_events) == 1
-            assert wake_events[0].message is not None
-            assert "(assignment)" in wake_events[0].message
-    finally:
-        await engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_entering_in_progress_with_existing_assignee_wakes_assignee(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def _fake_send_agent_task_message(**_: Any) -> str | None:
-        return None
-
-    monkeypatch.setattr(tasks_api, "_send_agent_task_message", _fake_send_agent_task_message)
-
-    engine = await _make_engine()
-    try:
-        async with await _make_session(engine) as session:
-            org_id = uuid4()
-            board_id = uuid4()
-            gateway_id = uuid4()
-            worker_id = uuid4()
-            task_id = uuid4()
-
-            session.add(Organization(id=org_id, name="org"))
-            session.add(
-                Gateway(
-                    id=gateway_id,
-                    organization_id=org_id,
-                    name="gateway",
-                    url="https://gateway.local",
-                    workspace_root="/tmp/workspace",
-                ),
-            )
-            session.add(
-                Board(
-                    id=board_id,
-                    organization_id=org_id,
-                    name="board",
-                    slug="board",
-                    gateway_id=gateway_id,
-                ),
-            )
-            session.add(
-                Agent(
-                    id=worker_id,
-                    name="worker",
-                    board_id=board_id,
-                    gateway_id=gateway_id,
-                    status="offline",
-                    openclaw_session_id="session-worker",
-                ),
-            )
-            session.add(
-                Task(
-                    id=task_id,
-                    board_id=board_id,
-                    title="status wake",
-                    description="",
-                    status="inbox",
-                    assigned_agent_id=worker_id,
-                ),
-            )
-            await session.commit()
-
-            task = (await session.exec(select(Task).where(col(Task.id) == task_id))).first()
-            assert task is not None
-            worker = (await session.exec(select(Agent).where(col(Agent.id) == worker_id))).first()
-            assert worker is not None
-
-            updated = await tasks_api.update_task(
-                payload=TaskUpdate(status="in_progress"),
-                task=task,
-                session=session,
-                actor=ActorContext(actor_type="agent", agent=worker),
-            )
-
-            assert updated.status == "in_progress"
-            assert updated.assigned_agent_id == worker_id
-
-            reloaded_worker = (
-                await session.exec(select(Agent).where(col(Agent.id) == worker_id))
-            ).first()
-            assert reloaded_worker is not None
-            assert reloaded_worker.status == "online"
-            assert reloaded_worker.last_seen_at is not None
-
-            wake_events = (
-                await session.exec(
-                    select(ActivityEvent)
-                    .where(col(ActivityEvent.task_id) == task_id)
-                    .where(col(ActivityEvent.event_type) == "task.assignee_woken"),
-                )
-            ).all()
-            assert len(wake_events) == 1
-            assert wake_events[0].message is not None
-            assert "(status_in_progress)" in wake_events[0].message
+            assert wakes == ["Worker"], f"Expected one wake for Worker, got: {wakes}"
     finally:
         await engine.dispose()

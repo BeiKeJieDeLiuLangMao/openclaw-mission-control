@@ -8,13 +8,20 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover
     from app.models.agents import Agent
 
-# Mention tokens are single, space-free words (e.g. "@alex", "@lead").
-MENTION_PATTERN = re.compile(r"@([A-Za-z][\w-]{0,31})")
+# Mention tokens are single, space-free words (e.g. "@alex", "@lead", "@商品详情PM").
+# Supports Unicode characters (Chinese, CJK, etc.).
+# Uses Unicode property matching to include letters/numbers from all languages.
+MENTION_PATTERN = re.compile(
+    r"@"
+    r"([a-zA-Z0-9_\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af-]{1,32})"
+    r"(?=[\s@、，,。！？.!?]|$)",
+    re.UNICODE
+)
 
 
 def extract_mentions(message: str) -> set[str]:
     """Extract normalized mention handles from a message body."""
-    return {match.group(1).lower() for match in MENTION_PATTERN.finditer(message)}
+    return {match.group(1).strip().lower() for match in MENTION_PATTERN.finditer(message)}
 
 
 def matches_agent_mention(agent: Agent, mentions: set[str]) -> bool:
@@ -33,6 +40,11 @@ def matches_agent_mention(agent: Agent, mentions: set[str]) -> bool:
 
     normalized = name.lower()
     if normalized in mentions:
+        return True
+
+    # Support mentions without spaces for multi-word names (e.g. "@missioncontrolpm" matches "Mission Control PM").
+    normalized_no_space = normalized.replace(" ", "")
+    if normalized_no_space in mentions:
         return True
 
     # Mentions are single tokens; match on first name for display names with spaces.

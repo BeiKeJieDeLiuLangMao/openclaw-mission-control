@@ -21,10 +21,14 @@ from app.api.board_memory import router as board_memory_router
 from app.api.board_onboarding import router as board_onboarding_router
 from app.api.board_webhooks import router as board_webhooks_router
 from app.api.boards import router as boards_router
+from app.api.costs import router as costs_router
 from app.api.gateway import router as gateway_router
 from app.api.gateways import router as gateways_router
+from app.api.crons import router as crons_router
+from app.api.memories import router as memories_router
 from app.api.metrics import router as metrics_router
 from app.api.organizations import router as organizations_router
+from app.api.sessions import router as sessions_router
 from app.api.skills_marketplace import router as skills_marketplace_router
 from app.api.souls_directory import router as souls_directory_router
 from app.api.tags import router as tags_router
@@ -73,6 +77,10 @@ OPENAPI_TAGS = [
     {
         "name": "metrics",
         "description": "Aggregated operational and board analytics metrics endpoints.",
+    },
+    {
+        "name": "costs",
+        "description": "Token usage and cost tracking endpoints from LCM database.",
     },
     {
         "name": "organizations",
@@ -129,6 +137,18 @@ OPENAPI_TAGS = [
     {
         "name": "users",
         "description": "User profile read/update operations and user-centric settings endpoints.",
+    },
+    {
+        "name": "memories",
+        "description": "MemOS memory visualization and statistics endpoints.",
+    },
+    {
+        "name": "crons",
+        "description": "Cron job listing and inspection endpoints via Gateway RPC.",
+    },
+    {
+        "name": "sessions",
+        "description": "Agent status detection endpoints based on Gateway sessions.",
     },
     {
         "name": "agent",
@@ -544,6 +564,7 @@ api_v1.include_router(activity_router)
 api_v1.include_router(gateway_router)
 api_v1.include_router(gateways_router)
 api_v1.include_router(metrics_router)
+api_v1.include_router(costs_router)
 api_v1.include_router(organizations_router)
 api_v1.include_router(souls_directory_router)
 api_v1.include_router(skills_marketplace_router)
@@ -558,6 +579,9 @@ api_v1.include_router(tasks_router)
 api_v1.include_router(task_custom_fields_router)
 api_v1.include_router(tags_router)
 api_v1.include_router(users_router)
+api_v1.include_router(memories_router)
+api_v1.include_router(crons_router)
+api_v1.include_router(sessions_router)
 app.include_router(api_v1)
 
 add_pagination(app)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -16,6 +16,24 @@ import { BrandMark } from "@/components/atoms/BrandMark";
 import { OrgSwitcher } from "@/components/organisms/OrgSwitcher";
 import { UserMenu } from "@/components/organisms/UserMenu";
 import { isOnboardingComplete } from "@/lib/onboarding";
+import { cn } from "@/lib/utils";
+
+const SIDEBAR_COLLAPSED_KEY = "openclaw_sidebar_collapsed";
+
+type SidebarContextType = {
+  collapsed: boolean;
+  toggleCollapse: () => void;
+};
+
+const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
+
+export const useSidebar = () => {
+  const context = useContext(SidebarContext);
+  if (!context) {
+    throw new Error("useSidebar must be used within DashboardShell");
+  }
+  return context;
+};
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -30,6 +48,32 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     setSidebarState({ open: false, path: pathname });
   }
   const sidebarOpen = sidebarState.open;
+
+  // Sidebar collapse state (desktop only)
+  // Always start with false to avoid SSR/client hydration mismatch.
+  // Read localStorage in useEffect (client-only) after mount.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true") {
+        setSidebarCollapsed(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleSidebarCollapse = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const newValue = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newValue));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return newValue;
+    });
+  }, []);
 
   const meQuery = useGetMeApiV1UsersMeGet<
     getMeApiV1UsersMeGetResponse,
@@ -93,10 +137,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   }, [sidebarOpen]);
 
   return (
-    <div className="min-h-screen bg-app text-strong" data-sidebar={sidebarOpen ? "open" : "closed"}>
+    <SidebarContext.Provider value={{ collapsed: sidebarCollapsed, toggleCollapse: toggleSidebarCollapse }}>
+      <div className="min-h-screen bg-app text-strong" data-sidebar={sidebarOpen ? "open" : "closed"}>
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-sm">
         <div className="flex items-center py-3">
-          <div className="flex items-center px-4 md:px-6 md:w-[260px]">
+          <div className={cn(
+            "flex items-center px-4 md:px-6 transition-all duration-200",
+            sidebarCollapsed ? "md:w-16" : "md:w-[260px]"
+          )}>
             {isSignedIn ? (
               <button
                 type="button"
@@ -140,9 +188,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         />
       ) : null}
 
-      <div className="grid min-h-[calc(100vh-64px)] grid-cols-1 md:grid-cols-[260px_1fr] bg-slate-50">
+      <div className="grid min-h-[calc(100vh-64px)] grid-cols-1 md:grid-cols-[auto_1fr] bg-slate-50">
         {children}
       </div>
-    </div>
+      </div>
+    </SidebarContext.Provider>
   );
 }

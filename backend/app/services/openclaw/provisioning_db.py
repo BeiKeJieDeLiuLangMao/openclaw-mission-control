@@ -69,6 +69,7 @@ from app.services.openclaw.gateway_rpc import (
 from app.services.openclaw.internal.agent_key import agent_key as _agent_key
 from app.services.openclaw.internal.retry import GatewayBackoff
 from app.services.openclaw.internal.session_keys import (
+    board_agent_ob_session_key,
     board_agent_session_key,
     board_lead_session_key,
 )
@@ -1540,6 +1541,33 @@ class AgentLifecycleService(OpenClawDBService):
 
         return EventSourceResponse(event_generator(), ping=15)
 
+    async def _init_ob_session(
+        self,
+        *,
+        agent_id: str,
+        config: GatewayClientConfig,
+    ) -> None:
+        """Fire-and-forget: initialize ob session for a newly created agent."""
+        try:
+            ob_key = board_agent_ob_session_key(agent_id)
+            await send_message(
+                "Hello",
+                session_key=ob_key,
+                config=config,
+                deliver=False,
+            )
+            self.logger.info(
+                "agent.ob_session.init.success agent_id=%s ob_key=%s",
+                agent_id,
+                ob_key,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning(
+                "agent.ob_session.init.failed agent_id=%s error=%s",
+                agent_id,
+                str(exc),
+            )
+
     async def create_agent(
         self,
         *,
@@ -1578,6 +1606,17 @@ class AgentLifecycleService(OpenClawDBService):
             user=actor.user if actor.actor_type == "user" else None,
             force_bootstrap=False,
         )
+        # Fire-and-forget: initialize ob session without blocking agent creation.
+        # Extract plain Python values before create_task to avoid SQLAlchemy
+        # lazy-load outside DB session context (MissingGreenlet error).
+        _ob_agent_id = str(agent.id)
+        _ob_config = GatewayClientConfig(
+            url=gateway.url or "",
+            token=gateway.token,
+            allow_insecure_tls=gateway.allow_insecure_tls,
+            disable_device_pairing=gateway.disable_device_pairing,
+        )
+        asyncio.create_task(self._init_ob_session(agent_id=_ob_agent_id, config=_ob_config))
         self.logger.info("agent.create.success agent_id=%s board_id=%s", agent.id, board.id)
         return self.to_agent_read(self.with_computed_status(agent))
 

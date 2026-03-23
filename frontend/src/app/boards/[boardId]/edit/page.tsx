@@ -502,6 +502,7 @@ export default function EditBoardPage() {
   const resolvedBoardGroupId =
     boardGroupId ?? baseBoard?.board_group_id ?? "none";
   const resolvedBoardType = boardType ?? baseBoard?.board_type ?? "goal";
+  const isGoalFieldsRequired = resolvedBoardType === "goal";
   const resolvedObjective = objective ?? baseBoard?.objective ?? "";
   const isGoalFieldsRequired = resolvedBoardType === "goal";
   const resolvedRequireApprovalForDone =

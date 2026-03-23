@@ -223,10 +223,10 @@ def create_rate_limiter(
 
 
 # Shared limiter instances for specific endpoints.
-# Agent auth: 20 attempts per 60 seconds per IP.
+# Agent auth: 500 attempts per 60 seconds per IP.
 agent_auth_limiter: RateLimiter = create_rate_limiter(
     namespace="agent_auth",
-    max_requests=20,
+    max_requests=500,
     window_seconds=60.0,
 )
 # Webhook ingest: 60 requests per 60 seconds per IP.

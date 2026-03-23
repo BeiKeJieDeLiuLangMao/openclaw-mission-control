@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 const MENTION_MAX_OPTIONS = 8;
-const MENTION_PATTERN = /(?:^|\s)@([A-Za-z0-9_-]{0,31})$/;
+const MENTION_PATTERN = /(?:^|\s)@(\S{0,31})$/;
 
 type MentionTarget = {
   start: number;
@@ -25,10 +25,10 @@ type BoardChatComposerProps = {
 const normalizeMentionHandle = (raw: string): string | null => {
   const trimmed = raw.trim().replace(/^@+/, "");
   if (!trimmed) return null;
-  const token = trimmed.split(/\s+/)[0]?.replace(/[^A-Za-z0-9_-]/g, "") ?? "";
+  // Keep the full name as handle — supports CJK and other Unicode chars
+  const token = trimmed.split(/\s+/).join("").slice(0, 32);
   if (!token) return null;
-  if (!/^[A-Za-z]/.test(token)) return null;
-  return token.slice(0, 32).toLowerCase();
+  return token.toLowerCase();
 };
 
 const findMentionTarget = (

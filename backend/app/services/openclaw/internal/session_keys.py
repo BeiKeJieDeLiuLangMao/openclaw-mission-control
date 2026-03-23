@@ -28,6 +28,11 @@ def board_agent_session_key(agent_id: UUID) -> str:
     return f"{AGENT_SESSION_PREFIX}:mc-{agent_id}:main"
 
 
+def board_agent_ob_session_key(agent_id: UUID) -> str:
+    """Return the deterministic ob session key for a board-scoped agent."""
+    return f"{AGENT_SESSION_PREFIX}:mc-{agent_id}:ob"
+
+
 def board_scoped_session_key(
     *,
     agent_id: UUID,
