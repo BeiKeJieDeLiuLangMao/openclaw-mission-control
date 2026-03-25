@@ -4,12 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  DollarSign,
-  TrendingUp,
-  MessageSquare,
-  Users,
-} from "lucide-react";
+import { DollarSign, TrendingUp, MessageSquare, Users } from "lucide-react";
 
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
@@ -20,6 +15,7 @@ import {
   type costMetricsApiV1CostsMetricsGetResponse,
   useCostMetricsApiV1CostsMetricsGet,
 } from "@/api/generated/costs/costs";
+import type { CostMetrics } from "@/api/generated/model/costMetrics";
 
 const DASH = "—";
 const DEFAULT_RANGE = "7d";
@@ -33,7 +29,9 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
 });
 
 function formatCount(value: number): string {
-  return Number.isFinite(value) ? numberFormatter.format(Math.max(0, Math.round(value))) : "0";
+  return Number.isFinite(value)
+    ? numberFormatter.format(Math.max(0, Math.round(value)))
+    : "0";
 }
 
 function formatCurrency(value: number): string {
@@ -83,15 +81,15 @@ function TopMetricCard({
             {title}
           </p>
           <div className="mt-2 flex items-end gap-2">
-            <p className="font-heading text-4xl font-bold text-slate-900">{value}</p>
+            <p className="font-heading text-4xl font-bold text-slate-900">
+              {value}
+            </p>
             {secondary ? (
               <p className="pb-1 text-xs text-slate-500">{secondary}</p>
             ) : null}
           </div>
         </div>
-        <div className={`rounded-lg p-2 ${iconTone}`}>
-          {icon}
-        </div>
+        <div className={`rounded-lg p-2 ${iconTone}`}>{icon}</div>
       </div>
     </section>
   );
@@ -113,7 +111,10 @@ function InfoBlock({
       <h3 className="mb-4 text-lg font-semibold text-slate-900">{title}</h3>
       <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-start justify-between gap-3 px-3 py-2">
+          <div
+            key={row.label}
+            className="flex items-start justify-between gap-3 px-3 py-2"
+          >
             <span className="min-w-0 text-sm text-slate-500">{row.label}</span>
             <span
               className={`max-w-[65%] break-words text-right text-sm font-medium leading-5 ${
@@ -173,37 +174,14 @@ export default function CostPage() {
     return costs.model_breakdown ?? [];
   }, [costs]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agentBreakdown = useMemo(() => {
+  const agentBreakdown = useMemo((): import("@/api/generated/model/agentCostBreakdown").AgentCostBreakdown[] => {
     if (!costs) return [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((costs as any).agent_breakdown ?? []) as Array<{
-      agent_id: string;
-      agent_name: string;
-      session_key: string;
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-      cost_usd: number;
-      conversations_count: number;
-      messages_count: number;
-    }>;
+    return costs.agent_breakdown ?? [];
   }, [costs]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const agentDailySeries = useMemo(() => {
+  const agentDailySeries = useMemo((): import("@/api/generated/model/agentDailyPoint").AgentDailyPoint[] => {
     if (!costs) return [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((costs as any).agent_daily_series ?? []) as Array<{
-      date: string;
-      agent_id: string;
-      agent_name: string;
-      input_tokens: number;
-      output_tokens: number;
-      total_tokens: number;
-      cost_usd: number;
-      messages_count: number;
-    }>;
+    return costs.agent_daily_series ?? [];
   }, [costs]);
 
   // top 5 agents by total_tokens, grouped by agent_id
@@ -220,7 +198,9 @@ export default function CostPage() {
 
   // distinct dates for the agent daily pivot table
   const agentDailyDates = useMemo(() => {
-    const dates = [...new Set(agentDailySeries.map((r) => r.date))].sort().slice(-7);
+    const dates = [...new Set(agentDailySeries.map((r) => r.date))]
+      .sort()
+      .slice(-7);
     return dates;
   }, [agentDailySeries]);
 
@@ -235,13 +215,14 @@ export default function CostPage() {
     return m;
   }, [agentDailySeries]);
 
-  // pivot: date -> agent_id -> cost_usd
+  // pivot: date -> agent_id -> total_cost_usd
   const agentDailyPivot = useMemo(() => {
     const pivot: Record<string, Record<string, number>> = {};
     for (const row of agentDailySeries) {
       if (!top5AgentIds.includes(row.agent_id)) continue;
       if (!pivot[row.date]) pivot[row.date] = {};
-      pivot[row.date][row.agent_id] = (pivot[row.date][row.agent_id] ?? 0) + row.cost_usd;
+      pivot[row.date][row.agent_id] =
+        (pivot[row.date][row.agent_id] ?? 0) + row.total_cost_usd;
     }
     return pivot;
   }, [agentDailySeries, top5AgentIds]);
@@ -338,7 +319,9 @@ export default function CostPage() {
             ) : null}
 
             <div className="mb-4">
-              <h1 className="text-2xl font-bold text-slate-900">Cost Tracking</h1>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Cost Tracking
+              </h1>
               <p className="mt-1 text-sm text-slate-500">
                 Track token usage and costs across your AI conversations
               </p>
@@ -350,7 +333,8 @@ export default function CostPage() {
               </div>
             ) : !costs ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-8 text-center text-sm text-amber-800">
-                Cost data is currently unavailable. Please make sure the LCM database is configured.
+                Cost data is currently unavailable. Please make sure the LCM
+                database is configured.
               </div>
             ) : (
               <>
@@ -388,24 +372,20 @@ export default function CostPage() {
 
                 {/* Detailed Information Blocks */}
                 <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-                  <InfoBlock
-                    title="Cost Overview"
-                    rows={totalCostRows}
-                  />
+                  <InfoBlock title="Cost Overview" rows={totalCostRows} />
                   <InfoBlock
                     title="Token Breakdown"
                     rows={tokenBreakdownRows}
                   />
-                  <InfoBlock
-                    title="Activity"
-                    rows={activityRows}
-                  />
+                  <InfoBlock title="Activity" rows={activityRows} />
                 </div>
 
                 {/* Daily Cost Breakdown */}
                 <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-semibold text-slate-900">Recent Daily Costs</h3>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Recent Daily Costs
+                    </h3>
                     <span className="text-xs text-slate-500">Last 7 days</span>
                   </div>
                   {recentDailyRows.length > 0 ? (
@@ -415,8 +395,12 @@ export default function CostPage() {
                           key={row.label}
                           className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
                         >
-                          <span className="text-sm text-slate-600">{row.label}</span>
-                          <span className="text-sm font-medium text-slate-900">{row.value}</span>
+                          <span className="text-sm text-slate-600">
+                            {row.label}
+                          </span>
+                          <span className="text-sm font-medium text-slate-900">
+                            {row.value}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -430,8 +414,12 @@ export default function CostPage() {
                 {/* Agent Breakdown */}
                 <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <h3 className="text-lg font-semibold text-slate-900">Agent 消耗排行</h3>
-                    <span className="text-xs text-slate-500">按 Agent 聚合</span>
+                    <h3 className="text-lg font-semibold text-slate-900">
+                      Agent 消耗排行
+                    </h3>
+                    <span className="text-xs text-slate-500">
+                      按 Agent 聚合
+                    </span>
                   </div>
                   {agentBreakdown.length > 0 ? (
                     <div className="overflow-x-auto">
@@ -448,12 +436,13 @@ export default function CostPage() {
                         <tbody>
                           {agentBreakdown.map((agent) => (
                             <tr
-                              key={agent.agent_id + agent.session_key}
+                              key={agent.agent_id}
                               className="border-b border-slate-100 last:border-0"
                             >
                               <td className="py-2 pr-4">
                                 <p className="font-medium text-slate-900">
-                                  {agent.agent_name || agent.agent_id.slice(0, 8)}
+                                  {agent.agent_name ||
+                                    agent.agent_id.slice(0, 8)}
                                 </p>
                                 <p className="text-xs text-slate-400">
                                   {agent.messages_count} 条消息
@@ -469,7 +458,7 @@ export default function CostPage() {
                                 {formatCompactNumber(agent.total_tokens)}
                               </td>
                               <td className="py-2 text-right tabular-nums text-emerald-700 font-semibold">
-                                {formatCurrency(agent.cost_usd)}
+                                {formatCurrency(agent.total_cost_usd)}
                               </td>
                             </tr>
                           ))}
@@ -487,8 +476,12 @@ export default function CostPage() {
                 {top5AgentIds.length > 0 && agentDailyDates.length > 0 && (
                   <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-lg font-semibold text-slate-900">每日趋势（按 Agent）</h3>
-                      <span className="text-xs text-slate-500">Top 5 Agent · 最近 7 天</span>
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        每日趋势（按 Agent）
+                      </h3>
+                      <span className="text-xs text-slate-500">
+                        Top 5 Agent · 最近 7 天
+                      </span>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse text-sm">
@@ -504,12 +497,20 @@ export default function CostPage() {
                         </thead>
                         <tbody>
                           {agentDailyDates.map((date) => (
-                            <tr key={date} className="border-b border-slate-100 last:border-0">
-                              <td className="py-2 pr-4 text-slate-600">{date}</td>
+                            <tr
+                              key={date}
+                              className="border-b border-slate-100 last:border-0"
+                            >
+                              <td className="py-2 pr-4 text-slate-600">
+                                {date}
+                              </td>
                               {top5AgentIds.map((agId) => {
                                 const val = agentDailyPivot[date]?.[agId];
                                 return (
-                                  <td key={agId} className="py-2 pr-3 text-right tabular-nums text-slate-700">
+                                  <td
+                                    key={agId}
+                                    className="py-2 pr-3 text-right tabular-nums text-slate-700"
+                                  >
                                     {val != null ? formatCurrency(val) : "—"}
                                   </td>
                                 );
