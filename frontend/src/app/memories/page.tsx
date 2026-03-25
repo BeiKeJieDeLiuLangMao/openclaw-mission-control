@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Brain, Search, Plus, Trash2, RefreshCw, Bot, Filter } from "lucide-react";
 
 import { DashboardShell } from "@/components/templates/DashboardShell";
@@ -65,14 +65,14 @@ const searchMemories = async (params: {
   return res.json();
 };
 
-// Derive stats from memories list (mem0 has no /stats endpoint)
+// Derive stats from memories list (mem0 has no /stats endpoint, 兼容驼峰和下划线)
 function deriveStats(memories: MemoryItem[]): MemoryStats {
   const by_source: Record<string, number> = {};
   const by_agent: Record<string, number> = {};
   for (const m of memories) {
     const src = String(m.metadata?.source ?? "unknown");
     by_source[src] = (by_source[src] ?? 0) + 1;
-    const agentId = String(m.metadata?.agent_id ?? "unknown");
+    const agentId = String(m.metadata?.agentId ?? m.metadata?.agent_id ?? "unknown");
     by_agent[agentId] = (by_agent[agentId] ?? 0) + 1;
   }
   return {
@@ -82,11 +82,12 @@ function deriveStats(memories: MemoryItem[]): MemoryStats {
   };
 }
 
-// Derive agent list from memories
+// Derive agent list from memories (兼容驼峰和下划线两种格式)
 function deriveAgents(memories: MemoryItem[]): AgentInfo[] {
   const countMap: Record<string, number> = {};
   for (const m of memories) {
-    const agentId = String(m.metadata?.agent_id ?? "unknown");
+    // 兼容 OpenClaw 插件存入的 agentId（驼峰）和 server.py 存入的 agent_id（下划线）
+    const agentId = String(m.metadata?.agentId ?? m.metadata?.agent_id ?? "unknown");
     countMap[agentId] = (countMap[agentId] ?? 0) + 1;
   }
   return Object.entries(countMap).map(([agent_id, count]) => ({ agent_id, count }));
@@ -126,8 +127,9 @@ function formatDate(dateStr: unknown): string {
       month: "short",
       day: "numeric",
       hour: "2-digit",
-      minute: "2-digit",
       hour12: false,
+      minute: "2-digit",
+      second: "2-digit",
     });
   } catch {
     return String(dateStr);
@@ -191,10 +193,10 @@ function MemoryCard({
             {truncate(memory.memory, 300)}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!!memory.metadata?.agent_id && (
+            {(!!memory.metadata?.agent_id || !!memory.metadata?.agentId) && (
               <Badge variant="outline" className="gap-1 text-xs">
                 <Bot className="h-3 w-3" />
-                {String(memory.metadata!.agent_id).slice(0, 8)}…
+                {String(memory.metadata!.agentId ?? memory.metadata!.agent_id)}
               </Badge>
             )}
             {!!memory.metadata?.source && (
@@ -265,7 +267,7 @@ function AgentFilter({
         >
           <span className="flex items-center gap-1">
             <Bot className="h-3 w-3" />
-            {agent.agent_id.slice(0, 6)}… ({agent.count})
+            {agent.agent_id} ({agent.count})
           </span>
         </button>
       ))}
@@ -286,6 +288,18 @@ export default function MemoriesPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sortedMemories = useMemo(() => {
+    return [...memories].sort((a, b) => {
+      const aTime = a.metadata?.created_at
+        ? new Date(String(a.metadata.created_at)).getTime()
+        : 0;
+      const bTime = b.metadata?.created_at
+        ? new Date(String(b.metadata.created_at)).getTime()
+        : 0;
+      return bTime - aTime;
+    });
+  }, [memories]);
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [addingMemory, setAddingMemory] = useState(false);
@@ -446,7 +460,7 @@ export default function MemoriesPage() {
               </div>
               {selectedAgent && (
                 <p className="mt-2 text-xs text-slate-500">
-                  将添加到 Agent: {selectedAgent.slice(0, 8)}…
+                  将添加到 Agent: {selectedAgent}
                 </p>
               )}
             </div>
@@ -478,7 +492,7 @@ export default function MemoriesPage() {
                 label="当前筛选"
                 value={selectedAgent ? 1 : 0}
                 accent={selectedAgent ? "text-blue-500" : undefined}
-                sub={selectedAgent ? selectedAgent.slice(0, 8) + "…" : "全部"}
+                sub={selectedAgent ?? "全部"}
               />
             </div>
           ) : null}
@@ -531,7 +545,7 @@ export default function MemoriesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700">
-                记忆列表 ({memories.length})
+                记忆列表 ({sortedMemories.length})
               </h2>
             </div>
 
@@ -544,13 +558,13 @@ export default function MemoriesPage() {
                   />
                 ))}
               </div>
-            ) : memories.length === 0 ? (
+            ) : sortedMemories.length === 0 ? (
               <div className="flex h-[120px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-500">
                 {searchQuery ? "未找到匹配的记忆" : "暂无记忆，使用上方搜索框添加"}
               </div>
             ) : (
               <div className="space-y-3">
-                {memories.map((memory) => (
+                {sortedMemories.map((memory: MemoryItem) => (
                   <MemoryCard
                     key={memory.id}
                     memory={memory}

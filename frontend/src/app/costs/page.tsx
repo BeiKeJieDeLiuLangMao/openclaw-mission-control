@@ -209,7 +209,7 @@ export default function CostPage() {
     const m: Record<string, string> = {};
     for (const row of agentDailySeries) {
       if (!m[row.agent_id]) {
-        m[row.agent_id] = row.agent_name || row.agent_id.slice(0, 8);
+        m[row.agent_id] = row.agent_name || row.agent_id;
       }
     }
     return m;
@@ -441,8 +441,7 @@ export default function CostPage() {
                             >
                               <td className="py-2 pr-4">
                                 <p className="font-medium text-slate-900">
-                                  {agent.agent_name ||
-                                    agent.agent_id.slice(0, 8)}
+                                  {agent.agent_name || agent.agent_id}
                                 </p>
                                 <p className="text-xs text-slate-400">
                                   {agent.messages_count} 条消息
@@ -490,7 +489,7 @@ export default function CostPage() {
                             <th className="pb-2 pr-4">日期</th>
                             {top5AgentIds.map((id) => (
                               <th key={id} className="pb-2 pr-3 text-right">
-                                {agentNameMap[id] || id.slice(0, 8)}
+                                {agentNameMap[id] || id}
                               </th>
                             ))}
                           </tr>
