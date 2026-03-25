@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, createContext, useContext, useEffect, useState } from "react";
+import {
+  useCallback,
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -40,7 +46,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isSignedIn } = useAuth();
   const isOnboardingPath = pathname === "/onboarding";
-  const [sidebarState, setSidebarState] = useState({ open: false, path: pathname });
+  const [sidebarState, setSidebarState] = useState({
+    open: false,
+    path: pathname,
+  });
   // Close sidebar on navigation using React's "store info from previous
   // renders" pattern — conditional setState during render resets immediately
   // without extra commits, avoiding both set-state-in-effect and refs rules.
@@ -130,67 +139,85 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!sidebarOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSidebarState((prev) => ({ ...prev, open: false }));
+      if (e.key === "Escape")
+        setSidebarState((prev) => ({ ...prev, open: false }));
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [sidebarOpen]);
 
   return (
-    <SidebarContext.Provider value={{ collapsed: sidebarCollapsed, toggleCollapse: toggleSidebarCollapse }}>
-      <div className="min-h-screen bg-app text-strong" data-sidebar={sidebarOpen ? "open" : "closed"}>
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center py-3">
-          <div className={cn(
-            "flex items-center px-4 md:px-6 transition-all duration-200",
-            sidebarCollapsed ? "md:w-16" : "md:w-[260px]"
-          )}>
-            {isSignedIn ? (
-              <button
-                type="button"
-                className="mr-3 rounded-lg p-2 text-slate-600 hover:bg-slate-100 md:hidden"
-                onClick={toggleSidebar}
-                aria-label="Toggle navigation"
-              >
-                {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </button>
-            ) : null}
-            <BrandMark />
+    <SidebarContext.Provider
+      value={{
+        collapsed: sidebarCollapsed,
+        toggleCollapse: toggleSidebarCollapse,
+      }}
+    >
+      <div
+        className="min-h-screen bg-app text-strong"
+        data-sidebar={sidebarOpen ? "open" : "closed"}
+      >
+        <header className="sticky top-0 z-50 border-b border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center py-3">
+            <div
+              className={cn(
+                "flex items-center px-4 md:px-6 transition-all duration-200",
+                sidebarCollapsed ? "md:w-16" : "md:w-[260px]",
+              )}
+            >
+              {isSignedIn ? (
+                <button
+                  type="button"
+                  className="mr-3 rounded-lg p-2 text-slate-600 hover:bg-slate-100 md:hidden"
+                  onClick={toggleSidebar}
+                  aria-label="Toggle navigation"
+                >
+                  {sidebarOpen ? (
+                    <X className="h-5 w-5" />
+                  ) : (
+                    <Menu className="h-5 w-5" />
+                  )}
+                </button>
+              ) : null}
+              <BrandMark />
+            </div>
+            <SignedIn>
+              <div className="hidden md:flex flex-1 items-center">
+                <div className="max-w-[220px]">
+                  <OrgSwitcher />
+                </div>
+              </div>
+            </SignedIn>
+            <SignedIn>
+              <div className="ml-auto flex items-center gap-3 px-4 md:px-6">
+                <div className="hidden text-right lg:block">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {displayName}
+                  </p>
+                  <p className="text-xs text-slate-500">Operator</p>
+                </div>
+                <UserMenu
+                  displayName={displayName}
+                  displayEmail={displayEmail}
+                />
+              </div>
+            </SignedIn>
           </div>
-          <SignedIn>
-            <div className="hidden md:flex flex-1 items-center">
-              <div className="max-w-[220px]">
-                <OrgSwitcher />
-              </div>
-            </div>
-          </SignedIn>
-          <SignedIn>
-            <div className="ml-auto flex items-center gap-3 px-4 md:px-6">
-              <div className="hidden text-right lg:block">
-                <p className="text-sm font-semibold text-slate-900">
-                  {displayName}
-                </p>
-                <p className="text-xs text-slate-500">Operator</p>
-              </div>
-              <UserMenu displayName={displayName} displayEmail={displayEmail} />
-            </div>
-          </SignedIn>
+        </header>
+
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen ? (
+          <div
+            className="fixed inset-0 z-40 bg-black/30 md:hidden"
+            onClick={toggleSidebar}
+            aria-hidden="true"
+            data-cy="sidebar-backdrop"
+          />
+        ) : null}
+
+        <div className="grid min-h-[calc(100vh-64px)] grid-cols-1 md:grid-cols-[auto_1fr] bg-slate-50">
+          {children}
         </div>
-      </header>
-
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen ? (
-        <div
-          className="fixed inset-0 z-40 bg-black/30 md:hidden"
-          onClick={toggleSidebar}
-          aria-hidden="true"
-          data-cy="sidebar-backdrop"
-        />
-      ) : null}
-
-      <div className="grid min-h-[calc(100vh-64px)] grid-cols-1 md:grid-cols-[auto_1fr] bg-slate-50">
-        {children}
-      </div>
       </div>
     </SidebarContext.Provider>
   );

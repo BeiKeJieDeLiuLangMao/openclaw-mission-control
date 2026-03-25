@@ -127,15 +127,22 @@ const formatShortTimestamp = (value: string) => {
 };
 
 const normalizeRouteParams = (
-  params: ActivityEventRead["route_params"] | ActivityRouteParams | null | undefined,
+  params:
+    | ActivityEventRead["route_params"]
+    | ActivityRouteParams
+    | null
+    | undefined,
 ): ActivityRouteParams => {
   if (!params || typeof params !== "object") return {};
-  return Object.entries(params).reduce<ActivityRouteParams>((acc, [key, value]) => {
-    if (typeof value === "string" && value.length > 0) {
-      acc[key] = value;
-    }
-    return acc;
-  }, {});
+  return Object.entries(params).reduce<ActivityRouteParams>(
+    (acc, [key, value]) => {
+      if (typeof value === "string" && value.length > 0) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {},
+  );
 };
 
 const buildRouteHref = (
@@ -397,7 +404,9 @@ export default function ActivityPage() {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
   }, [searchParams]);
-  const [highlightedFeedItemId, setHighlightedFeedItemId] = useState<string | null>(null);
+  const [highlightedFeedItemId, setHighlightedFeedItemId] = useState<
+    string | null
+  >(null);
 
   const membershipQuery = useGetMyMembershipApiV1OrganizationsMeMemberGet<
     getMyMembershipApiV1OrganizationsMeMemberGetResponse,
@@ -514,8 +523,7 @@ export default function ActivityPage() {
       if (taskId) fallbackRouteParams.taskId = taskId;
       const effectiveRouteParams =
         Object.keys(routeParams).length > 0 ? routeParams : fallbackRouteParams;
-      const effectiveRouteName =
-        routeName ?? (boardId ? "board" : "activity");
+      const effectiveRouteName = routeName ?? (boardId ? "board" : "activity");
       const author = resolveAuthor(event.agent_id, currentUserDisplayName);
       return {
         id: `activity:${event.id}`,
@@ -531,8 +539,7 @@ export default function ActivityPage() {
         board_href: buildBoardHref(effectiveRouteParams, boardId),
         task_id: taskId,
         task_title: meta?.title ?? null,
-        title:
-          meta?.title ?? (taskId ? "Unknown task" : "Task activity"),
+        title: meta?.title ?? (taskId ? "Unknown task" : "Task activity"),
         context_href: buildRouteHref(effectiveRouteName, effectiveRouteParams, {
           eventId: event.id,
           eventType: event.event_type,
@@ -570,8 +577,7 @@ export default function ActivityPage() {
         board_href: buildBoardHref(routeParams, boardId),
         task_id: taskId,
         task_title: meta?.title ?? null,
-        title:
-          meta?.title ?? (taskId ? "Unknown task" : "Task activity"),
+        title: meta?.title ?? (taskId ? "Unknown task" : "Task activity"),
         context_href: buildRouteHref("board", routeParams, {
           eventId: comment.id,
           eventType: "task.comment",
@@ -741,9 +747,7 @@ export default function ActivityPage() {
               ? `${agent.name} is offline.`
               : `${agent.name} updated (${humanizeStatus(nextStatus)}).`;
       const boardId = agent.board_id ?? null;
-      const routeParams: ActivityRouteParams = boardId
-        ? { boardId }
-        : {};
+      const routeParams: ActivityRouteParams = boardId ? { boardId } : {};
 
       return {
         id: `agent:${agent.id}:${isSnapshot ? "snapshot" : kind}:${stamp}`,
@@ -1457,7 +1461,8 @@ export default function ActivityPage() {
     if (directMatch) return directMatch.id;
     const fallbackMatch = orderedFeed.find(
       (item) =>
-        item.id === selectedEventId || item.id === `activity:${selectedEventId}`,
+        item.id === selectedEventId ||
+        item.id === `activity:${selectedEventId}`,
     );
     return fallbackMatch?.id ?? null;
   }, [orderedFeed, selectedEventId]);
@@ -1470,7 +1475,9 @@ export default function ActivityPage() {
 
     setHighlightedFeedItemId(selectedFeedItemId);
     const scrollTimeout = window.setTimeout(() => {
-      const element = document.getElementById(feedItemElementId(selectedFeedItemId));
+      const element = document.getElementById(
+        feedItemElementId(selectedFeedItemId),
+      );
       if (!element) return;
       element.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
@@ -1529,7 +1536,8 @@ export default function ActivityPage() {
               <div className="p-4 md:p-8">
                 {hasUnresolvedDeepLink ? (
                   <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-                    Requested activity item is not in the current feed window yet.
+                    Requested activity item is not in the current feed window
+                    yet.
                   </div>
                 ) : null}
                 <ActivityFeed

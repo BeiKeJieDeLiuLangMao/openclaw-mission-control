@@ -4,6 +4,8 @@
  * Mission Control API
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentCostBreakdown } from "./agentCostBreakdown";
+import type { AgentDailyPoint } from "./agentDailyPoint";
 import type { CostKpis } from "./costKpis";
 import type { CostMetricsRange } from "./costMetricsRange";
 import type { DailyCostPoint } from "./dailyCostPoint";
@@ -18,4 +20,6 @@ export interface CostMetrics {
   kpis: CostKpis;
   daily_series: DailyCostPoint[];
   model_breakdown: ModelCostBreakdown[];
+  agent_breakdown?: AgentCostBreakdown[];
+  agent_daily_series?: AgentDailyPoint[];
 }

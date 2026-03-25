@@ -27,9 +27,7 @@ import {
   type dashboardMetricsApiV1MetricsDashboardGetResponse,
   useDashboardMetricsApiV1MetricsDashboardGet,
 } from "@/api/generated/metrics/metrics";
-import {
-  gatewaysStatusApiV1GatewaysStatusGet,
-} from "@/api/generated/gateways/gateways";
+import { gatewaysStatusApiV1GatewaysStatusGet } from "@/api/generated/gateways/gateways";
 import type { GatewaysStatusResponse } from "@/api/generated/model/gatewaysStatusResponse";
 import {
   type listAgentsApiV1AgentsGetResponse,
@@ -189,9 +187,13 @@ const readTimestampFromRecords = (
   return null;
 };
 
-const sessionIdentifiers = (record: Record<string, unknown> | null): string[] => {
+const sessionIdentifiers = (
+  record: Record<string, unknown> | null,
+): string[] => {
   if (!record) return [];
-  const ids = SESSION_ID_KEYS.map((key) => readString(record, [key])).filter(Boolean) as string[];
+  const ids = SESSION_ID_KEYS.map((key) => readString(record, [key])).filter(
+    Boolean,
+  ) as string[];
   return [...new Set(ids)];
 };
 
@@ -210,13 +212,16 @@ const compactNumber = (value: number): string => {
 };
 
 const formatCount = (value: number): string =>
-  Number.isFinite(value) ? numberFormatter.format(Math.max(0, Math.round(value))) : "0";
+  Number.isFinite(value)
+    ? numberFormatter.format(Math.max(0, Math.round(value)))
+    : "0";
 
 const formatPercent = (value: number): string =>
   Number.isFinite(value) ? `${value.toFixed(1)}%` : DASH;
 
 const formatPerDay = (total: number, days: number): string => {
-  if (!Number.isFinite(total) || !Number.isFinite(days) || days <= 0) return DASH;
+  if (!Number.isFinite(total) || !Number.isFinite(days) || days <= 0)
+    return DASH;
   return `${(total / days).toFixed(1)}/day`;
 };
 
@@ -224,15 +229,15 @@ const toSessionSummaries = (
   sessions: unknown[] | null | undefined,
   mainSession: unknown,
 ): SessionSummary[] => {
-  const sessionRecords = (sessions ?? []).map(toRecord).filter(Boolean) as Array<
-    Record<string, unknown>
-  >;
+  const sessionRecords = (sessions ?? [])
+    .map(toRecord)
+    .filter(Boolean) as Array<Record<string, unknown>>;
   const mainRecord = toRecord(mainSession);
   const mainIdentifiers = sessionIdentifiers(mainRecord);
 
   if (mainRecord && mainIdentifiers.length > 0) {
-    const exists = sessionRecords.some(
-      (entry) => sharesSessionIdentity(sessionIdentifiers(entry), mainIdentifiers),
+    const exists = sessionRecords.some((entry) =>
+      sharesSessionIdentity(sessionIdentifiers(entry), mainIdentifiers),
     );
     if (!exists) sessionRecords.unshift(mainRecord);
   }
@@ -242,7 +247,10 @@ const toSessionSummaries = (
 
   for (const entry of sessionRecords) {
     const identifiers = sessionIdentifiers(entry);
-    if (identifiers.length > 0 && identifiers.some((value) => seenIdentifiers.has(value))) {
+    if (
+      identifiers.length > 0 &&
+      identifiers.some((value) => seenIdentifiers.has(value))
+    ) {
       continue;
     }
     uniqueRecords.push(entry);
@@ -258,17 +266,29 @@ const toSessionSummaries = (
 
     const identifiers = sessionIdentifiers(entry);
     const key =
-      readString(entry, ["key", "session_key", "sessionKey", "id", "sessionId"]) ??
-      `session-${index}`;
+      readString(entry, [
+        "key",
+        "session_key",
+        "sessionKey",
+        "id",
+        "sessionId",
+      ]) ?? `session-${index}`;
     const label = readString(entry, ["label", "name", "title"]) ?? key;
-    const channel = readStringFromRecords([entry, originRecord], [
-      "channel",
-      "source",
-      "kind",
-      "chatType",
+    const channel = readStringFromRecords(
+      [entry, originRecord],
+      ["channel", "source", "kind", "chatType"],
+    );
+    const model = readString(entry, [
+      "model",
+      "model_name",
+      "provider",
+      "engine",
     ]);
-    const model = readString(entry, ["model", "model_name", "provider", "engine"]);
-    const modelProvider = readString(entry, ["modelProvider", "model_provider", "provider"]);
+    const modelProvider = readString(entry, [
+      "modelProvider",
+      "model_provider",
+      "provider",
+    ]);
     const lastSeenAt = readTimestampFromRecords(candidateRecords, [
       "updated_at",
       "updatedAt",
@@ -336,10 +356,15 @@ const toSessionSummaries = (
           : DASH;
 
     const subtitleBits = [channel, model].filter(Boolean) as string[];
-    const subtitle = subtitleBits.length > 0 ? subtitleBits.join(" · ") : "Session";
+    const subtitle =
+      subtitleBits.length > 0 ? subtitleBits.join(" · ") : "Session";
     const modelWithProvider =
-      modelProvider && model && modelProvider !== model ? `${model} · ${modelProvider}` : model;
-    const subtitleWithProvider = [channel, modelWithProvider].filter(Boolean).join(" · ");
+      modelProvider && model && modelProvider !== model
+        ? `${model} · ${modelProvider}`
+        : model;
+    const subtitleWithProvider = [channel, modelWithProvider]
+      .filter(Boolean)
+      .join(" · ");
 
     return {
       key,
@@ -397,15 +422,15 @@ function TopMetricCard({
             ) : null}
           </div>
           <div className="mt-2 flex items-end gap-2">
-            <p className="font-heading text-4xl font-bold text-slate-900">{value}</p>
+            <p className="font-heading text-4xl font-bold text-slate-900">
+              {value}
+            </p>
             {secondary ? (
               <p className="pb-1 text-xs text-slate-500">{secondary}</p>
             ) : null}
           </div>
         </div>
-        <div className={`rounded-lg p-2 ${iconTone}`}>
-          {icon}
-        </div>
+        <div className={`rounded-lg p-2 ${iconTone}`}>{icon}</div>
       </div>
     </section>
   );
@@ -453,7 +478,10 @@ function InfoBlock({
       </div>
       <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
         {rows.map((row) => (
-          <div key={`${row.label}-${row.value}`} className="flex items-start justify-between gap-3 px-3 py-2">
+          <div
+            key={`${row.label}-${row.value}`}
+            className="flex items-start justify-between gap-3 px-3 py-2"
+          >
             <span className="min-w-0 text-sm text-slate-500">{row.label}</span>
             <span
               className={`max-w-[65%] break-words text-right text-sm font-medium leading-5 ${
@@ -479,7 +507,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const { isSignedIn } = useAuth();
 
-  const boardsQuery = useListBoardsApiV1BoardsGet<listBoardsApiV1BoardsGetResponse, ApiError>(
+  const boardsQuery = useListBoardsApiV1BoardsGet<
+    listBoardsApiV1BoardsGetResponse,
+    ApiError
+  >(
     { limit: 200 },
     {
       query: {
@@ -490,7 +521,10 @@ export default function DashboardPage() {
     },
   );
 
-  const agentsQuery = useListAgentsApiV1AgentsGet<listAgentsApiV1AgentsGetResponse, ApiError>(
+  const agentsQuery = useListAgentsApiV1AgentsGet<
+    listAgentsApiV1AgentsGetResponse,
+    ApiError
+  >(
     { limit: 200 },
     {
       query: {
@@ -519,7 +553,10 @@ export default function DashboardPage() {
     },
   );
 
-  const activityQuery = useListActivityApiV1ActivityGet<listActivityApiV1ActivityGetResponse, ApiError>(
+  const activityQuery = useListActivityApiV1ActivityGet<
+    listActivityApiV1ActivityGetResponse,
+    ApiError
+  >(
     { limit: 200 },
     {
       query: {
@@ -533,7 +570,9 @@ export default function DashboardPage() {
   const boards = useMemo(
     () =>
       boardsQuery.data?.status === 200
-        ? [...(boardsQuery.data.data.items ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+        ? [...(boardsQuery.data.data.items ?? [])].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          )
         : [],
     [boardsQuery.data],
   );
@@ -541,15 +580,20 @@ export default function DashboardPage() {
   const agents = useMemo(
     () =>
       agentsQuery.data?.status === 200
-        ? [...(agentsQuery.data.data.items ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+        ? [...(agentsQuery.data.data.items ?? [])].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          )
         : [],
     [agentsQuery.data],
   );
 
-  const metrics = metricsQuery.data?.status === 200 ? metricsQuery.data.data : null;
+  const metrics =
+    metricsQuery.data?.status === 200 ? metricsQuery.data.data : null;
 
   const onlineAgents = useMemo(
-    () => agents.filter((agent) => (agent.status ?? "").toLowerCase() === "online").length,
+    () =>
+      agents.filter((agent) => (agent.status ?? "").toLowerCase() === "online")
+        .length,
     [agents],
   );
   const gatewayTargets = useMemo<GatewayTarget[]>(() => {
@@ -564,7 +608,9 @@ export default function DashboardPage() {
         boardName: board.name,
       });
     }
-    return [...byGateway.values()].sort((a, b) => a.boardName.localeCompare(b.boardName));
+    return [...byGateway.values()].sort((a, b) =>
+      a.boardName.localeCompare(b.boardName),
+    );
   }, [boards]);
   const hasConfiguredGateways = gatewayTargets.length > 0;
 
@@ -622,7 +668,9 @@ export default function DashboardPage() {
               mainSessionError: null,
               error: null,
               requestError:
-                error instanceof Error ? error.message : "Gateway status request failed.",
+                error instanceof Error
+                  ? error.message
+                  : "Gateway status request failed.",
             };
           }
         }),
@@ -639,11 +687,13 @@ export default function DashboardPage() {
       gatewaySnapshots.flatMap((snapshot) => {
         if (snapshot.requestError) return [];
         const sourceLabel = snapshot.gatewayUrl || snapshot.boardName;
-        return toSessionSummaries(snapshot.sessions, snapshot.mainSession).map((session) => ({
-          ...session,
-          key: `${snapshot.gatewayId}:${session.key}`,
-          subtitle: `${sourceLabel} · ${session.subtitle}`,
-        }));
+        return toSessionSummaries(snapshot.sessions, snapshot.mainSession).map(
+          (session) => ({
+            ...session,
+            key: `${snapshot.gatewayId}:${session.key}`,
+            subtitle: `${sourceLabel} · ${session.subtitle}`,
+          }),
+        );
       }),
     [gatewaySnapshots],
   );
@@ -669,7 +719,9 @@ export default function DashboardPage() {
   const recentLogs = orderedActivityEvents.slice(0, 8);
 
   const latestThroughputPoint =
-    metrics?.throughput.primary.points?.[metrics.throughput.primary.points.length - 1] ?? null;
+    metrics?.throughput.primary.points?.[
+      metrics.throughput.primary.points.length - 1
+    ] ?? null;
   const throughputTotal = (metrics?.throughput.primary.points ?? []).reduce(
     (sum, point) => sum + Number(point.value ?? 0),
     0,
@@ -685,11 +737,18 @@ export default function DashboardPage() {
   const doneTasksMetric = metrics?.kpis.done_tasks ?? 0;
 
   const activeAgentsMetric = onlineAgents;
-  const tasksTotal = inboxTasksMetric + inProgressTasksMetric + reviewTasksMetric + doneTasksMetric;
-  const tasksInProgressMetric = metrics?.kpis.tasks_in_progress ?? inProgressTasksMetric;
+  const tasksTotal =
+    inboxTasksMetric +
+    inProgressTasksMetric +
+    reviewTasksMetric +
+    doneTasksMetric;
+  const tasksInProgressMetric =
+    metrics?.kpis.tasks_in_progress ?? inProgressTasksMetric;
   const errorRateMetric = Number(metrics?.kpis.error_rate_pct ?? 0);
   const reviewBacklogRatio =
-    inProgressTasksMetric > 0 ? reviewTasksMetric / inProgressTasksMetric : null;
+    inProgressTasksMetric > 0
+      ? reviewTasksMetric / inProgressTasksMetric
+      : null;
 
   const gatewayConnectedCount = gatewaySnapshots.filter(
     (snapshot) => !snapshot.requestError && snapshot.connected,
@@ -697,11 +756,11 @@ export default function DashboardPage() {
   const gatewayDisconnectedCount = gatewaySnapshots.filter(
     (snapshot) => !snapshot.requestError && !snapshot.connected,
   ).length;
-  const gatewayUnavailableCount = gatewaySnapshots.filter(
-    (snapshot) => Boolean(snapshot.requestError),
+  const gatewayUnavailableCount = gatewaySnapshots.filter((snapshot) =>
+    Boolean(snapshot.requestError),
   ).length;
-  const gatewayHealthErrorCount = gatewaySnapshots.filter(
-    (snapshot) => Boolean(snapshot.error || snapshot.mainSessionError),
+  const gatewayHealthErrorCount = gatewaySnapshots.filter((snapshot) =>
+    Boolean(snapshot.error || snapshot.mainSessionError),
   ).length;
 
   const countedSessions = gatewaySnapshots.reduce(
@@ -732,9 +791,11 @@ export default function DashboardPage() {
   const gatewayStatusTone: SummaryRow["tone"] =
     gatewayStatusLabel === "All connected"
       ? "success"
-      : gatewayStatusLabel === "Checking" || gatewayStatusLabel === "Not configured"
+      : gatewayStatusLabel === "Checking" ||
+          gatewayStatusLabel === "Not configured"
         ? "default"
-        : gatewayStatusLabel === "Partially connected" || gatewayStatusLabel === "Disconnected"
+        : gatewayStatusLabel === "Partially connected" ||
+            gatewayStatusLabel === "Disconnected"
           ? "warning"
           : "danger";
 
@@ -768,7 +829,10 @@ export default function DashboardPage() {
       label: "Completed tasks",
       value: formatCount(throughputTotal),
     },
-    { label: "Average throughput", value: formatPerDay(throughputTotal, DASHBOARD_RANGE_DAYS) },
+    {
+      label: "Average throughput",
+      value: formatPerDay(throughputTotal, DASHBOARD_RANGE_DAYS),
+    },
     {
       label: "Error rate",
       value: formatPercent(errorRateMetric),
@@ -777,7 +841,10 @@ export default function DashboardPage() {
     {
       label: "Completion consistency",
       value: `${formatCount(completionDaysCount)} active days`,
-      tone: completionDaysCount >= Math.ceil(DASHBOARD_RANGE_DAYS * 0.75) ? "success" : "default",
+      tone:
+        completionDaysCount >= Math.ceil(DASHBOARD_RANGE_DAYS * 0.75)
+          ? "success"
+          : "default",
     },
     {
       label: "Review backlog ratio",
@@ -799,7 +866,11 @@ export default function DashboardPage() {
   ];
 
   const gatewayRows: SummaryRow[] = [
-    { label: "Gateway status", value: gatewayStatusLabel, tone: gatewayStatusTone },
+    {
+      label: "Gateway status",
+      value: gatewayStatusLabel,
+      tone: gatewayStatusTone,
+    },
     { label: "Configured gateways", value: formatCount(gatewayTargets.length) },
     {
       label: "Connected gateways",
@@ -814,7 +885,10 @@ export default function DashboardPage() {
     {
       label: "Gateways with issues",
       value: formatCount(gatewayHealthErrorCount + gatewayDisconnectedCount),
-      tone: gatewayHealthErrorCount + gatewayDisconnectedCount > 0 ? "warning" : "success",
+      tone:
+        gatewayHealthErrorCount + gatewayDisconnectedCount > 0
+          ? "warning"
+          : "success",
     },
   ];
   const pendingApprovalItems = metrics?.pending_approvals.items ?? [];
@@ -941,10 +1015,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-              <InfoBlock
-                title="Workload"
-                rows={workloadRows}
-              />
+              <InfoBlock title="Workload" rows={workloadRows} />
               <InfoBlock
                 title="Throughput"
                 infoText={`All throughput values are calculated for ${DASHBOARD_RANGE_LABEL}`}
@@ -962,7 +1033,9 @@ export default function DashboardPage() {
 
             <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-slate-900">Pending Approvals</h3>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Pending Approvals
+                </h3>
                 <Link
                   href="/approvals"
                   className="inline-flex items-center gap-1 text-xs text-slate-500 transition hover:text-slate-700"
@@ -1005,8 +1078,8 @@ export default function DashboardPage() {
                   </div>
                   {pendingApprovalsTotal > pendingApprovalItems.length ? (
                     <p className="text-xs text-slate-500">
-                      Showing latest {formatCount(pendingApprovalItems.length)} of{" "}
-                      {formatCount(pendingApprovalsTotal)} pending approvals.
+                      Showing latest {formatCount(pendingApprovalItems.length)}{" "}
+                      of {formatCount(pendingApprovalsTotal)} pending approvals.
                     </p>
                   ) : null}
                 </div>
@@ -1020,8 +1093,12 @@ export default function DashboardPage() {
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold text-slate-900">Sessions</h3>
-                  <span className="text-xs text-slate-500">{formatCount(activeSessions)}</span>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Sessions
+                  </h3>
+                  <span className="text-xs text-slate-500">
+                    {formatCount(activeSessions)}
+                  </span>
                 </div>
                 <div className="max-h-[310px] space-y-2 overflow-x-hidden overflow-y-auto pr-1">
                   {!hasConfiguredGateways ? (
@@ -1037,8 +1114,8 @@ export default function DashboardPage() {
                       {gatewayUnavailableCount > 0 ? (
                         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
                           {formatCount(gatewayUnavailableCount)} gateway
-                          {gatewayUnavailableCount === 1 ? "" : "s"} unavailable; showing sessions
-                          from reachable gateways.
+                          {gatewayUnavailableCount === 1 ? "" : "s"}{" "}
+                          unavailable; showing sessions from reachable gateways.
                         </div>
                       ) : null}
                       {sessionSummaries.map((session) => (
@@ -1051,16 +1128,22 @@ export default function DashboardPage() {
                               <p className="truncate text-sm font-medium text-slate-900">
                                 <span
                                   className={`mr-2 inline-block h-2 w-2 rounded-full ${
-                                    session.isMain ? "bg-emerald-500" : "bg-slate-400"
+                                    session.isMain
+                                      ? "bg-emerald-500"
+                                      : "bg-slate-400"
                                   }`}
                                 />
                                 {session.title}
                               </p>
-                              <p className="mt-0.5 truncate text-xs text-slate-500">{session.subtitle}</p>
+                              <p className="mt-0.5 truncate text-xs text-slate-500">
+                                {session.subtitle}
+                              </p>
                             </div>
                             <div className="min-w-0 max-w-[45%] text-right">
                               <p className="truncate text-xs font-medium text-slate-700">
-                                {session.usage === DASH ? "Usage unavailable" : session.usage}
+                                {session.usage === DASH
+                                  ? "Usage unavailable"
+                                  : session.usage}
                               </p>
                               <p className="text-[11px] text-slate-500">
                                 {session.lastSeenAt
@@ -1086,7 +1169,9 @@ export default function DashboardPage() {
 
               <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 md:p-6 shadow-sm">
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold text-slate-900">Recent Activity</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Recent Activity
+                  </h3>
                   <Link
                     href={activityFeedHref}
                     className="inline-flex items-center gap-1 text-xs text-slate-500 transition hover:text-slate-700"
@@ -1104,7 +1189,7 @@ export default function DashboardPage() {
                           key={event.id}
                           role="link"
                           tabIndex={0}
-                        aria-label={`Open related context for ${event.event_type} activity`}
+                          aria-label={`Open related context for ${event.event_type} activity`}
                           onClick={(interactionEvent) =>
                             handleLogRowClick(interactionEvent, eventHref)
                           }
@@ -1117,7 +1202,9 @@ export default function DashboardPage() {
                             <div className="min-w-0 flex-1 overflow-hidden">
                               <div className="break-words text-sm font-medium text-slate-900 [&_ol]:mb-0 [&_p]:mb-0 [&_pre]:my-1 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_ul]:mb-0">
                                 <Markdown
-                                  content={event.message?.trim() || event.event_type}
+                                  content={
+                                    event.message?.trim() || event.event_type
+                                  }
                                   variant="comment"
                                 />
                               </div>
@@ -1137,7 +1224,9 @@ export default function DashboardPage() {
                     <div className="flex h-[240px] flex-col items-center justify-center rounded-lg border border-slate-200 bg-white text-sm text-slate-500">
                       <Shield className="mb-2 h-5 w-5 text-slate-400" />
                       No activity yet
-                      <p className="mt-1 text-xs text-slate-500">Activity appears here when events are emitted.</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Activity appears here when events are emitted.
+                      </p>
                     </div>
                   )}
                 </div>

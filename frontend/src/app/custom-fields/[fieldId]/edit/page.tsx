@@ -18,7 +18,7 @@ import {
   getListOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGetQueryKey,
   useListOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGet,
   useUpdateOrgCustomFieldApiV1OrganizationsMeCustomFieldsTaskCustomFieldDefinitionIdPatch,
-} from "@/api/generated/org-custom-fields/org-custom-fields";
+} from "@/api/generated/custom-fields/custom-fields";
 import type { TaskCustomFieldDefinitionUpdate } from "@/api/generated/model";
 import { CustomFieldForm } from "@/components/custom-fields/CustomFieldForm";
 import { DashboardPageLayout } from "@/components/templates/DashboardPageLayout";

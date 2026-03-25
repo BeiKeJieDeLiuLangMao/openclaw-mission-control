@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { isLocalAuthMode } from "@/auth/localAuth";
 import {
   SignInButton,
   SignedIn,
@@ -12,6 +13,7 @@ import {
   useAuth,
   useUser,
 } from "@/auth/clerk";
+import { LocalAuthLogin } from "@/components/organisms/LocalAuthLogin";
 import { Globe, Info, RotateCcw, Save, User } from "lucide-react";
 
 import { ApiError } from "@/api/mutator";
@@ -114,27 +116,31 @@ export default function OnboardingPage() {
   return (
     <DashboardShell>
       <SignedOut>
-        <div className="lg:col-span-2 flex min-h-[70vh] items-center justify-center">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-6 py-5">
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                Mission Control profile
-              </h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Sign in to configure your profile and timezone.
-              </p>
-            </div>
-            <div className="px-6 py-6">
-              <SignInButton
-                mode="modal"
-                forceRedirectUrl="/onboarding"
-                signUpForceRedirectUrl="/onboarding"
-              >
-                <Button size="lg">Sign in</Button>
-              </SignInButton>
+        {isLocalAuthMode() ? (
+          <LocalAuthLogin />
+        ) : (
+          <div className="lg:col-span-2 flex min-h-[70vh] items-center justify-center">
+            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  Mission Control profile
+                </h1>
+                <p className="mt-1 text-sm text-slate-600">
+                  Sign in to configure your profile and timezone.
+                </p>
+              </div>
+              <div className="px-6 py-6">
+                <SignInButton
+                  mode="modal"
+                  forceRedirectUrl="/onboarding"
+                  signUpForceRedirectUrl="/onboarding"
+                >
+                  <Button size="lg">Sign in</Button>
+                </SignInButton>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </SignedOut>
       <SignedIn>
         <div className="lg:col-span-2 flex min-h-[70vh] items-center justify-center">

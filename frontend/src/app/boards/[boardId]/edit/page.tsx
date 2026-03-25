@@ -504,7 +504,6 @@ export default function EditBoardPage() {
   const resolvedBoardType = boardType ?? baseBoard?.board_type ?? "goal";
   const isGoalFieldsRequired = resolvedBoardType === "goal";
   const resolvedObjective = objective ?? baseBoard?.objective ?? "";
-  const isGoalFieldsRequired = resolvedBoardType === "goal";
   const resolvedRequireApprovalForDone =
     requireApprovalForDone ?? baseBoard?.require_approval_for_done ?? true;
   const resolvedRequireReviewBeforeDone =

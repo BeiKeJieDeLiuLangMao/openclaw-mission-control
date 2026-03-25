@@ -19,6 +19,7 @@ import type {
 
 import type {
   HTTPValidationError,
+  ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
   ListCronJobsApiV1CronsJobsGetParams,
 } from ".././model";
 
@@ -225,6 +226,239 @@ export function useListCronJobsApiV1CronsJobsGet<
   queryKey: DataTag<QueryKey, TData, TError>;
 } {
   const queryOptions = getListCronJobsApiV1CronsJobsGetQueryOptions(
+    params,
+    options,
+  );
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Get run history for a specific cron job from the Gateway.
+ * @summary List Cron Job Runs
+ */
+export type listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse200 = {
+  data: unknown;
+  status: 200;
+};
+
+export type listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse422 = {
+  data: HTTPValidationError;
+  status: 422;
+};
+
+export type listCronJobRunsApiV1CronsJobsJobIdRunsGetResponseSuccess =
+  listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse200 & {
+    headers: Headers;
+  };
+export type listCronJobRunsApiV1CronsJobsJobIdRunsGetResponseError =
+  listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse422 & {
+    headers: Headers;
+  };
+
+export type listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse =
+  | listCronJobRunsApiV1CronsJobsJobIdRunsGetResponseSuccess
+  | listCronJobRunsApiV1CronsJobsJobIdRunsGetResponseError;
+
+export const getListCronJobRunsApiV1CronsJobsJobIdRunsGetUrl = (
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/crons/jobs/${jobId}/runs?${stringifiedParams}`
+    : `/api/v1/crons/jobs/${jobId}/runs`;
+};
+
+export const listCronJobRunsApiV1CronsJobsJobIdRunsGet = async (
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options?: RequestInit,
+): Promise<listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse> => {
+  return customFetch<listCronJobRunsApiV1CronsJobsJobIdRunsGetResponse>(
+    getListCronJobRunsApiV1CronsJobsJobIdRunsGetUrl(jobId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryKey = (
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+) => {
+  return [
+    `/api/v1/crons/jobs/${jobId}/runs`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+  TError = HTTPValidationError,
+>(
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryKey(jobId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>
+  > = ({ signal }) =>
+    listCronJobRunsApiV1CronsJobsJobIdRunsGet(jobId, params, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!jobId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>
+>;
+export type ListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryError =
+  HTTPValidationError;
+
+export function useListCronJobRunsApiV1CronsJobsJobIdRunsGet<
+  TData = Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+  TError = HTTPValidationError,
+>(
+  jobId: string,
+  params: undefined | ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListCronJobRunsApiV1CronsJobsJobIdRunsGet<
+  TData = Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+  TError = HTTPValidationError,
+>(
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>
+        >,
+        "initialData"
+      >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useListCronJobRunsApiV1CronsJobsJobIdRunsGet<
+  TData = Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+  TError = HTTPValidationError,
+>(
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+/**
+ * @summary List Cron Job Runs
+ */
+
+export function useListCronJobRunsApiV1CronsJobsJobIdRunsGet<
+  TData = Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+  TError = HTTPValidationError,
+>(
+  jobId: string,
+  params?: ListCronJobRunsApiV1CronsJobsJobIdRunsGetParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof listCronJobRunsApiV1CronsJobsJobIdRunsGet>>,
+        TError,
+        TData
+      >
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getListCronJobRunsApiV1CronsJobsJobIdRunsGetQueryOptions(
+    jobId,
     params,
     options,
   );

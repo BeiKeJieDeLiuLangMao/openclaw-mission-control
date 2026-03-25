@@ -11,7 +11,9 @@ export function GlobalLoader() {
   const mutatingCount = useIsMutating();
 
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const visible = mounted && fetchingCount + mutatingCount > 0;
 

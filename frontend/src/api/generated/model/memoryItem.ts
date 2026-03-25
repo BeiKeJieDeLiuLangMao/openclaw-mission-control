@@ -15,4 +15,5 @@ export interface MemoryItem {
   task_id: string | null;
   tier?: string | null;
   tier_reason?: string | null;
+  agent_id?: string | null;
 }

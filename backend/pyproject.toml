@@ -45,6 +45,11 @@ dev = [
     "ruff==0.15.0",
 ]
 
+[dependency-groups]
+dev = [
+    "vulture>=2.15",
+]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

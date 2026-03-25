@@ -1,12 +1,15 @@
 #!/bin/bash
 
 # OpenClaw Mission Control 本地启动脚本
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 echo "🚀 启动 OpenClaw Mission Control..."
 
 # 进入后端目录并启动
-cd /Users/yishu.cy/IdeaProjects/openclaw-mission-control/backend
-source venv/bin/activate
+cd backend
+source .venv/bin/activate
 echo "📦 启动后端服务..."
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
@@ -22,7 +25,7 @@ WORKER_PID=$!
 echo "Worker PID: $WORKER_PID"
 
 # 进入前端目录并启动
-cd /Users/yishu.cy/IdeaProjects/openclaw-mission-control/frontend
+cd "$SCRIPT_DIR/frontend"
 echo "🎨 启动前端服务..."
 npm run dev &
 FRONTEND_PID=$!

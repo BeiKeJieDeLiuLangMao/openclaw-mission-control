@@ -86,17 +86,24 @@ describe("TaskBoard", () => {
     expect(reviewHeading).toBeInTheDocument();
     expect(doneHeading).toBeInTheDocument();
 
-    const inboxColumn = inboxHeading.closest(".kanban-column") as HTMLElement | null;
+    const inboxColumn = inboxHeading.closest(
+      ".kanban-column",
+    ) as HTMLElement | null;
     const inProgressColumn = inProgressHeading.closest(
       ".kanban-column",
     ) as HTMLElement | null;
-    const reviewColumn = reviewHeading.closest(".kanban-column") as HTMLElement | null;
-    const doneColumn = doneHeading.closest(".kanban-column") as HTMLElement | null;
+    const reviewColumn = reviewHeading.closest(
+      ".kanban-column",
+    ) as HTMLElement | null;
+    const doneColumn = doneHeading.closest(
+      ".kanban-column",
+    ) as HTMLElement | null;
     expect(inboxColumn).toBeTruthy();
     expect(inProgressColumn).toBeTruthy();
     expect(reviewColumn).toBeTruthy();
     expect(doneColumn).toBeTruthy();
-    if (!inboxColumn || !inProgressColumn || !reviewColumn || !doneColumn) return;
+    if (!inboxColumn || !inProgressColumn || !reviewColumn || !doneColumn)
+      return;
 
     const getColumnCountBadge = (column: HTMLElement) =>
       column.querySelector(
@@ -142,7 +149,9 @@ describe("TaskBoard", () => {
     render(<TaskBoard tasks={tasks} />);
 
     const reviewHeading = screen.getByRole("heading", { name: "Review" });
-    const reviewColumn = reviewHeading.closest(".kanban-column") as HTMLElement | null;
+    const reviewColumn = reviewHeading.closest(
+      ".kanban-column",
+    ) as HTMLElement | null;
     expect(reviewColumn).toBeTruthy();
     if (!reviewColumn) return;
 
@@ -154,7 +163,9 @@ describe("TaskBoard", () => {
 
     const headerQueries = within(header);
 
-    expect(headerQueries.getByRole("button", { name: /All · 3/i })).toBeInTheDocument();
+    expect(
+      headerQueries.getByRole("button", { name: /All · 3/i }),
+    ).toBeInTheDocument();
     expect(
       headerQueries.getByRole("button", { name: /Approval needed · 1/i }),
     ).toBeInTheDocument();
@@ -165,7 +176,9 @@ describe("TaskBoard", () => {
       headerQueries.getByRole("button", { name: /Blocked · 1/i }),
     ).toBeInTheDocument();
 
-    fireEvent.click(headerQueries.getByRole("button", { name: /Blocked · 1/i }));
+    fireEvent.click(
+      headerQueries.getByRole("button", { name: /Blocked · 1/i }),
+    );
     expect(screen.getByText("Blocked Review")).toBeInTheDocument();
     expect(screen.queryByText("Needs Approval")).not.toBeInTheDocument();
     expect(screen.queryByText("Lead Review")).not.toBeInTheDocument();

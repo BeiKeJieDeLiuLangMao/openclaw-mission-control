@@ -15,7 +15,7 @@ MENTION_PATTERN = re.compile(
     r"@"
     r"([a-zA-Z0-9_\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af-]{1,32})"
     r"(?=[\s@、，,。！？.!?]|$)",
-    re.UNICODE
+    re.UNICODE,
 )
 
 

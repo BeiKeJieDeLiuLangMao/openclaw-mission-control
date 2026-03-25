@@ -2591,8 +2591,7 @@ async def _notify_task_update_assignment_changes(
             )
 
     assignment_changed = (
-        update.task.assigned_agent_id
-        and update.task.assigned_agent_id != update.previous_assigned
+        update.task.assigned_agent_id and update.task.assigned_agent_id != update.previous_assigned
     )
 
     if not update.task.assigned_agent_id:

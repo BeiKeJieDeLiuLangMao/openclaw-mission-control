@@ -220,7 +220,12 @@ function getJobRunsIn7Days(job: CronJob): JobRun[] {
                   status = "skipped";
                 }
               }
-              results.push({ dayIndex: dayOffset, timeLabel, ts: targetTs, status });
+              results.push({
+                dayIndex: dayOffset,
+                timeLabel,
+                ts: targetTs,
+                status,
+              });
             }
           }
         } else {
@@ -232,7 +237,12 @@ function getJobRunsIn7Days(job: CronJob): JobRun[] {
               dayOffset * 86400000 +
               (hour * 60 + minute) * 60000 -
               8 * 3600000;
-            results.push({ dayIndex: dayOffset, timeLabel, ts: targetTs, status: "scheduled" });
+            results.push({
+              dayIndex: dayOffset,
+              timeLabel,
+              ts: targetTs,
+              status: "scheduled",
+            });
           }
         }
       }
@@ -280,11 +290,16 @@ function getStatusDotClass(status?: string): string {
 
 function getStatusLabel(status?: string): string {
   switch ((status ?? "").toLowerCase()) {
-    case "ok": return "成功";
-    case "error": return "失败";
-    case "skipped": return "跳过";
-    case "running": return "运行中";
-    default: return "计划中";
+    case "ok":
+      return "成功";
+    case "error":
+      return "失败";
+    case "skipped":
+      return "跳过";
+    case "running":
+      return "运行中";
+    default:
+      return "计划中";
   }
 }
 
@@ -374,8 +389,8 @@ function CronJobRow({ job }: { job: CronJob }) {
               )}
               {job.schedule?.everyMs && (
                 <span className="inline-flex items-center gap-1 rounded bg-violet-50 px-2 py-0.5 font-mono text-[10px] text-violet-700">
-                  <Clock className="h-3 w-3" />
-                  每 {job.schedule.everyMs / 60000 >= 60
+                  <Clock className="h-3 w-3" />每{" "}
+                  {job.schedule.everyMs / 60000 >= 60
                     ? `${job.schedule.everyMs / 3600000}h`
                     : `${job.schedule.everyMs / 60000}m`}
                 </span>
@@ -417,16 +432,22 @@ function CronJobRow({ job }: { job: CronJob }) {
           )}
           {job.payload?.message && (
             <div>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Payload</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Payload
+              </p>
               <pre className="whitespace-pre-wrap font-mono text-xs text-slate-700">
-                {job.payload.message.slice(0, 300)}{job.payload.message.length > 300 ? "…" : ""}
+                {job.payload.message.slice(0, 300)}
+                {job.payload.message.length > 300 ? "…" : ""}
               </pre>
             </div>
           )}
           <div className="flex gap-4 text-[10px] text-slate-500">
-            {job.state?.consecutiveErrors != null && job.state.consecutiveErrors > 0 && (
-              <span className="text-rose-600">连续失败: {job.state.consecutiveErrors}</span>
-            )}
+            {job.state?.consecutiveErrors != null &&
+              job.state.consecutiveErrors > 0 && (
+                <span className="text-rose-600">
+                  连续失败: {job.state.consecutiveErrors}
+                </span>
+              )}
             {job.payload?.timeoutSeconds != null && (
               <span>超时: {job.payload.timeoutSeconds}s</span>
             )}
@@ -454,7 +475,11 @@ function CalendarDetailModal({
   onClose: () => void;
 }) {
   const { job, timeLabel, status } = item;
-  const agentName = extractAgentName(job.sessionKey, job.agentId, job.agent_name);
+  const agentName = extractAgentName(
+    job.sessionKey,
+    job.agentId,
+    job.agent_name,
+  );
 
   return (
     <div
@@ -473,7 +498,9 @@ function CalendarDetailModal({
         </button>
 
         <div className="mb-4">
-          <h3 className="text-base font-semibold text-slate-900">{job.name ?? job.id}</h3>
+          <h3 className="text-base font-semibold text-slate-900">
+            {job.name ?? job.id}
+          </h3>
           <p className="mt-0.5 text-sm text-slate-500">{agentName}</p>
         </div>
 
@@ -481,19 +508,31 @@ function CalendarDetailModal({
           {/* 执行状态 */}
           <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
             <span className="text-xs text-slate-500">执行时间</span>
-            <span className="text-xs font-medium text-slate-900">{timeLabel}</span>
+            <span className="text-xs font-medium text-slate-900">
+              {timeLabel}
+            </span>
           </div>
 
           <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
             <span className="text-xs text-slate-500">执行状态</span>
-            <span className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-              status === "ok" ? "bg-emerald-100 text-emerald-700" :
-              status === "error" ? "bg-rose-100 text-rose-700" :
-              status === "skipped" ? "bg-slate-100 text-slate-500" :
-              "bg-blue-100 text-blue-700"
-            )}>
-              <span className={cn("h-1.5 w-1.5 rounded-full", getStatusDotClass(status))} />
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                status === "ok"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : status === "error"
+                    ? "bg-rose-100 text-rose-700"
+                    : status === "skipped"
+                      ? "bg-slate-100 text-slate-500"
+                      : "bg-blue-100 text-blue-700",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  getStatusDotClass(status),
+                )}
+              />
               {getStatusLabel(status)}
             </span>
           </div>
@@ -502,7 +541,9 @@ function CalendarDetailModal({
           {job.state?.lastRunAtMs && (
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
               <span className="text-xs text-slate-500">上次执行</span>
-              <span className="text-xs font-medium text-slate-900">{formatMs(job.state.lastRunAtMs)}</span>
+              <span className="text-xs font-medium text-slate-900">
+                {formatMs(job.state.lastRunAtMs)}
+              </span>
             </div>
           )}
 
@@ -510,7 +551,9 @@ function CalendarDetailModal({
           {job.state?.lastDurationMs != null && (
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
               <span className="text-xs text-slate-500">耗时</span>
-              <span className="text-xs font-medium text-slate-900">{formatDuration(job.state.lastDurationMs)}</span>
+              <span className="text-xs font-medium text-slate-900">
+                {formatDuration(job.state.lastDurationMs)}
+              </span>
             </div>
           )}
 
@@ -518,31 +561,40 @@ function CalendarDetailModal({
           {job.state?.nextRunAtMs && (
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
               <span className="text-xs text-slate-500">下次执行</span>
-              <span className="text-xs font-medium text-slate-900">{formatMs(job.state.nextRunAtMs)}</span>
+              <span className="text-xs font-medium text-slate-900">
+                {formatMs(job.state.nextRunAtMs)}
+              </span>
             </div>
           )}
 
           {/* 错误信息 */}
           {job.state?.lastError && (
             <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
-              <p className="mb-1 text-[10px] font-semibold uppercase text-rose-400">错误信息</p>
+              <p className="mb-1 text-[10px] font-semibold uppercase text-rose-400">
+                错误信息
+              </p>
               <p className="text-xs text-rose-700">{job.state.lastError}</p>
             </div>
           )}
 
           {/* 调度 */}
           <div className="rounded-lg bg-slate-50 px-3 py-2">
-            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400">调度规则</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase text-slate-400">
+              调度规则
+            </p>
             {job.schedule?.expr && (
               <p className="font-mono text-xs text-slate-700">
-                {job.schedule.expr}{job.schedule.tz ? ` (${job.schedule.tz})` : ""}
+                {job.schedule.expr}
+                {job.schedule.tz ? ` (${job.schedule.tz})` : ""}
               </p>
             )}
             {job.schedule?.everyMs && (
               <p className="font-mono text-xs text-slate-700">
-                每 {job.schedule.everyMs >= 3600000
+                每{" "}
+                {job.schedule.everyMs >= 3600000
                   ? `${job.schedule.everyMs / 3600000}h`
-                  : `${job.schedule.everyMs / 60000}m`} 执行一次
+                  : `${job.schedule.everyMs / 60000}m`}{" "}
+                执行一次
               </p>
             )}
           </div>
@@ -554,7 +606,9 @@ function CalendarDetailModal({
 
 // ------ Calendar View ------
 function WeekCalendarView({ jobs }: { jobs: CronJob[] }) {
-  const [selectedItem, setSelectedItem] = useState<CalendarRunItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CalendarRunItem | null>(
+    null,
+  );
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -681,9 +735,10 @@ function WeekCalendarView({ jobs }: { jobs: CronJob[] }) {
                 {dayRuns.length > 0 && (
                   <div className="mt-1 border-t border-slate-200/60 pt-1 text-center text-[8px] text-slate-400">
                     {dayRuns.length} 次
-                    {dayRuns.filter(r => r.status === "error").length > 0 && (
+                    {dayRuns.filter((r) => r.status === "error").length > 0 && (
                       <span className="ml-1 text-rose-400">
-                        {dayRuns.filter(r => r.status === "error").length} 失败
+                        {dayRuns.filter((r) => r.status === "error").length}{" "}
+                        失败
                       </span>
                     )}
                   </div>
@@ -747,7 +802,9 @@ export default function CronsPage() {
 
   const enabledCount = allJobs.filter((j) => j.enabled).length;
   const disabledCount = allJobs.length - enabledCount;
-  const errorCount = allJobs.filter((j) => j.state?.lastStatus === "error").length;
+  const errorCount = allJobs.filter(
+    (j) => j.state?.lastStatus === "error",
+  ).length;
 
   return (
     <DashboardShell>
@@ -790,7 +847,12 @@ export default function CronsPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 最近失败
               </p>
-              <p className={cn("mt-2 text-3xl font-bold", errorCount > 0 ? "text-rose-500" : "text-slate-400")}>
+              <p
+                className={cn(
+                  "mt-2 text-3xl font-bold",
+                  errorCount > 0 ? "text-rose-500" : "text-slate-400",
+                )}
+              >
                 {errorCount}
               </p>
             </div>
@@ -928,11 +990,12 @@ export default function CronsPage() {
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-4">
                 <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-                  <CalendarDays className="h-5 w-5 text-slate-400" />
-                  7 天日历视图
+                  <CalendarDays className="h-5 w-5 text-slate-400" />7
+                  天日历视图
                 </h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  显示未来 7 天内各 Cron Job 的执行计划（北京时间）· 点击格子查看详情
+                  显示未来 7 天内各 Cron Job 的执行计划（北京时间）·
+                  点击格子查看详情
                 </p>
               </div>
               {cronsQuery.isLoading ? (

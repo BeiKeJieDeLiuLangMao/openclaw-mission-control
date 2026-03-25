@@ -54,9 +54,7 @@ async def _build_agent_map(session: "AsyncSession", board_id: str | None) -> dic
         board_uuid = UUID(board_id)
     except ValueError:
         return {}
-    result = await session.exec(
-        select(Agent).where(Agent.board_id == board_uuid)
-    )
+    result = await session.exec(select(Agent).where(Agent.board_id == board_uuid))
     agents = result.all()
     name_map: dict[str, str] = {}
     for agent in agents:
@@ -74,7 +72,7 @@ async def _build_agent_map(session: "AsyncSession", board_id: str | None) -> dic
                 # e.g. "mc-{uuid}" -> "{uuid}"  |  "lead-{uuid}" -> "{uuid}"
                 for prefix in ("mc-", "lead-"):
                     if agent_id_key.startswith(prefix):
-                        bare_uuid = agent_id_key[len(prefix):]
+                        bare_uuid = agent_id_key[len(prefix) :]
                         name_map[bare_uuid] = agent.name or sid
                         break
     return name_map

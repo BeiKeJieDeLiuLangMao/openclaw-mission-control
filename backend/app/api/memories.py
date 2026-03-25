@@ -10,22 +10,21 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import httpx
-from sqlmodel import select
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlmodel import select
 
 from app.schemas.memories import (
     AgentMemoryStats,
     AgentWorkspace,
     LCMAgentItem,
     LCMConfig,
+    LCMDepthBucket,
     LCMSessionProgress,
+    LCMStatsOverview,
+    LCMStatsResponse,
     LCMSummaryDetail,
     LCMSummaryItem,
     LCMSummaryListResponse,
-    LCMDepthBucket,
-    LCMStatsOverview,
-    LCMStatsResponse,
     MemoryItem,
     MemoryListResponse,
     MemoryStats,
@@ -57,6 +56,7 @@ DEFAULT_MEMOS_DB_PATH = Path.home() / ".openclaw" / "memos-local" / "memos.db"
 
 # LCM database path
 LCM_DB_PATH = Path.home() / ".openclaw" / "lcm.db"
+
 
 async def _fetch_agent_name_map(session: "AsyncSession") -> dict[str, str]:
     """Return a mapping of memory owner id -> human-readable agent name.
@@ -184,7 +184,9 @@ def _row_to_recall_log_item(row: Mapping[str, any]) -> RecallLogItem:
         except (json.JSONDecodeError, TypeError):
             input_data = {}
 
-    query = str(input_data.get("query", input_data.get("q", "")) if isinstance(input_data, dict) else "")
+    query = str(
+        input_data.get("query", input_data.get("q", "")) if isinstance(input_data, dict) else ""
+    )
 
     called_at_value = float(row["called_at"])
     # Handle both seconds and milliseconds timestamps
@@ -210,8 +212,7 @@ async def get_memory_stats() -> MemoryStats:
         cursor = conn.cursor()
 
         # Get total memories and memories with embeddings
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             SELECT
                 COUNT(*) as total_memories,
                 SUM(CASE WHEN e.chunk_id IS NOT NULL THEN 1 ELSE 0 END) as memories_with_embeddings,
@@ -219,8 +220,7 @@ async def get_memory_stats() -> MemoryStats:
             FROM chunks c
             LEFT JOIN embeddings e ON c.id = e.chunk_id
             WHERE 1=1 {MC_AGENT_FILTER}
-            """
-        )
+            """)
         row = cursor.fetchone()
         if not row:
             return MemoryStats(total_memories=0, memories_with_embeddings=0, total_agents=0)
@@ -231,7 +231,9 @@ async def get_memory_stats() -> MemoryStats:
 
 
 @router.get("/by-agent", response_model=list[AgentMemoryStats])
-async def get_memory_stats_by_agent(session: "AsyncSession" = Depends(get_session)) -> list[AgentMemoryStats]:
+async def get_memory_stats_by_agent(
+    session: "AsyncSession" = Depends(get_session),
+) -> list[AgentMemoryStats]:
     """Get memory statistics grouped by agent."""
     name_map = await _fetch_agent_name_map(session)
 
@@ -239,8 +241,7 @@ async def get_memory_stats_by_agent(session: "AsyncSession" = Depends(get_sessio
     try:
         cursor = conn.cursor()
 
-        cursor.execute(
-            f"""
+        cursor.execute(f"""
             SELECT
                 c.owner as agent_id,
                 COUNT(*) as memory_count,
@@ -250,18 +251,19 @@ async def get_memory_stats_by_agent(session: "AsyncSession" = Depends(get_sessio
             WHERE 1=1 {MC_AGENT_FILTER}
             GROUP BY c.owner
             ORDER BY memory_count DESC
-            """
-        )
+            """)
 
         results = []
         for row in cursor.fetchall():
             agent_id = str(row["agent_id"])
-            results.append(AgentMemoryStats(
-                agent_id=agent_id,
-                memory_count=int(row["memory_count"]),
-                embedding_count=int(row["embedding_count"]),
-                name=name_map.get(agent_id),
-            ))
+            results.append(
+                AgentMemoryStats(
+                    agent_id=agent_id,
+                    memory_count=int(row["memory_count"]),
+                    embedding_count=int(row["embedding_count"]),
+                    name=name_map.get(agent_id),
+                )
+            )
         return results
     finally:
         conn.close()
@@ -307,7 +309,9 @@ async def list_memories(
         END"""
 
         # Always restrict to MC-managed agents (exclude gateway system agent)
-        conditions.append("(c.owner LIKE 'agent:mc-%' OR c.owner LIKE 'agent:lead-%') AND c.owner NOT LIKE 'agent:mc-gateway-%'")
+        conditions.append(
+            "(c.owner LIKE 'agent:mc-%' OR c.owner LIKE 'agent:lead-%') AND c.owner NOT LIKE 'agent:mc-gateway-%'"
+        )
 
         if agent_id:
             conditions.append("c.owner = ?")
@@ -372,13 +376,11 @@ async def get_recall_log(
         cursor = conn.cursor()
 
         # Get total count of memory_search calls
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT COUNT(*) as total
             FROM api_logs
             WHERE tool_name = 'memory_search'
-            """
-        )
+            """)
         total_row = cursor.fetchone()
         total = int(total_row["total"]) if total_row else 0
 
@@ -411,7 +413,9 @@ async def get_recall_log(
                 # hit_count is the number of results returned
                 hit_count = 0
                 if isinstance(output_data, dict):
-                    results = output_data.get("candidates", output_data.get("results", output_data.get("matches", [])))
+                    results = output_data.get(
+                        "candidates", output_data.get("results", output_data.get("matches", []))
+                    )
                     hit_count = len(results) if isinstance(results, list) else 0
                 elif isinstance(output_data, list):
                     hit_count = len(output_data)
@@ -442,13 +446,11 @@ async def get_memory_stats_by_tier() -> TierListResponse:
         cursor = conn.cursor()
 
         # Fetch all records with created_at for tier computation
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT id, owner, summary, content, created_at
             FROM chunks
             ORDER BY created_at DESC
-            """
-        )
+            """)
         rows = cursor.fetchall()
 
         # Aggregate by tier
@@ -486,11 +488,11 @@ def _extract_agent_id_from_workspace_dir(name: str) -> str | None:
     Directory names: workspace-mc-<uuid>, workspace-lead-<board-uuid>, workspace-gateway-<uuid>
     """
     if name.startswith("workspace-mc-"):
-        return name[len("workspace-mc-"):]
+        return name[len("workspace-mc-") :]
     if name.startswith("workspace-lead-"):
-        return name[len("workspace-lead-"):]
+        return name[len("workspace-lead-") :]
     if name.startswith("workspace-gateway-"):
-        return name[len("workspace-gateway-"):]
+        return name[len("workspace-gateway-") :]
     return None
 
 
@@ -515,12 +517,14 @@ def _list_workspace_memory_files(workspace_root: Path) -> list[WorkspaceFileInfo
                 rel_path = path.name
             else:
                 rel_path = str(path.relative_to(workspace_root)).replace("\\", "/")
-            files.append(WorkspaceFileInfo(
-                name=path.name,
-                path=rel_path,
-                size=stat.st_size,
-                modified_at=datetime.fromtimestamp(stat.st_mtime),
-            ))
+            files.append(
+                WorkspaceFileInfo(
+                    name=path.name,
+                    path=rel_path,
+                    size=stat.st_size,
+                    modified_at=datetime.fromtimestamp(stat.st_mtime),
+                )
+            )
         except OSError:
             continue
 
@@ -545,7 +549,9 @@ async def list_workspace_files(
     agents = agents_result.all()
 
     agent_name_map: dict[str, str] = {str(a.id): a.name for a in agents}
-    lead_name_map: dict[str, str] = {str(a.board_id): a.name for a in agents if a.is_board_lead and a.board_id}
+    lead_name_map: dict[str, str] = {
+        str(a.board_id): a.name for a in agents if a.is_board_lead and a.board_id
+    }
 
     # Fetch gateway names
     gateway_result = await session.exec(select(Gateway))
@@ -571,11 +577,13 @@ async def list_workspace_files(
             agent_name = gateway_name_map.get(agent_id)
 
         files = _list_workspace_memory_files(ws_dir)
-        workspaces.append(AgentWorkspace(
-            agent_id=agent_id,
-            agent_name=agent_name,
-            files=files,
-        ))
+        workspaces.append(
+            AgentWorkspace(
+                agent_id=agent_id,
+                agent_name=agent_name,
+                files=files,
+            )
+        )
 
     return WorkspaceFilesResponse(workspaces=workspaces)
 
@@ -678,11 +686,14 @@ async def list_lcm_agents(
             )
             count_row = cursor.fetchone()
             count = int(count_row["cnt"]) if count_row else 0
-            results.append(LCMAgentItem(
-                session_key=session_key,
-                agent_name=name_map.get(session_key) or name_map.get(session_key.removesuffix(":main")),
-                count=count,
-            ))
+            results.append(
+                LCMAgentItem(
+                    session_key=session_key,
+                    agent_name=name_map.get(session_key)
+                    or name_map.get(session_key.removesuffix(":main")),
+                    count=count,
+                )
+            )
 
         # Only return board members (agents with known names), sort by count descending
         results = [r for r in results if r.agent_name is not None]
@@ -698,7 +709,9 @@ async def list_lcm_summaries(
     offset: int = Query(default=0, ge=0),
     kind: str = Query(default="all", description="Filter by kind (all/leaf/condensed)"),
     session_key: str | None = Query(default=None, description="Filter by exact session key"),
-    agent_id: str | None = Query(default=None, description="Filter by session_key containing agent_id"),
+    agent_id: str | None = Query(
+        default=None, description="Filter by session_key containing agent_id"
+    ),
     db_session: "AsyncSession" = Depends(get_session),
 ) -> LCMSummaryListResponse:
     """List LCM (lossless-claw) summaries with pagination and optional filters.
@@ -787,7 +800,9 @@ async def list_lcm_summaries(
         for row in rows:
             content = str(row["content"]) if row["content"] else ""
             try:
-                earliest_at = datetime.fromisoformat(row["earliest_at"]) if row["earliest_at"] else None
+                earliest_at = (
+                    datetime.fromisoformat(row["earliest_at"]) if row["earliest_at"] else None
+                )
             except (ValueError, TypeError):
                 earliest_at = None
             try:
@@ -796,18 +811,20 @@ async def list_lcm_summaries(
                 latest_at = None
 
             sk = str(row["session_key"])
-            items.append(LCMSummaryItem(
-                summary_id=str(row["summary_id"]),
-                session_key=sk,
-                agent_name=name_map.get(sk) or name_map.get(sk.removesuffix(":main")),
-                kind=str(row["kind"]),
-                depth=int(row["depth"]),
-                token_count=int(row["token_count"]),
-                earliest_at=earliest_at,
-                latest_at=latest_at,
-                descendant_count=int(row["descendant_count"]),
-                content_preview=content[:150] if len(content) > 150 else content,
-            ))
+            items.append(
+                LCMSummaryItem(
+                    summary_id=str(row["summary_id"]),
+                    session_key=sk,
+                    agent_name=name_map.get(sk) or name_map.get(sk.removesuffix(":main")),
+                    kind=str(row["kind"]),
+                    depth=int(row["depth"]),
+                    token_count=int(row["token_count"]),
+                    earliest_at=earliest_at,
+                    latest_at=latest_at,
+                    descendant_count=int(row["descendant_count"]),
+                    content_preview=content[:150] if len(content) > 150 else content,
+                )
+            )
 
         return LCMSummaryListResponse(
             items=items,
@@ -833,12 +850,15 @@ async def get_lcm_summary(summary_id: str) -> LCMSummaryDetail:
         cursor = conn.cursor()
 
         # Get summary details
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT s.*, c.session_key
             FROM summaries s
             JOIN conversations c ON s.conversation_id = c.conversation_id
             WHERE s.summary_id = ?
-        """, [summary_id])
+        """,
+            [summary_id],
+        )
         row = cursor.fetchone()
 
         if not row:
@@ -849,16 +869,14 @@ async def get_lcm_summary(summary_id: str) -> LCMSummaryDetail:
 
         # Get parent summaries
         cursor.execute(
-            "SELECT parent_summary_id FROM summary_parents WHERE summary_id = ?",
-            [summary_id]
+            "SELECT parent_summary_id FROM summary_parents WHERE summary_id = ?", [summary_id]
         )
         parent_rows = cursor.fetchall()
         parent_ids = [str(r["parent_summary_id"]) for r in parent_rows]
 
         # Get child summaries
         cursor.execute(
-            "SELECT summary_id FROM summary_parents WHERE parent_summary_id = ?",
-            [summary_id]
+            "SELECT summary_id FROM summary_parents WHERE parent_summary_id = ?", [summary_id]
         )
         child_rows = cursor.fetchall()
         child_ids = [str(r["summary_id"]) for r in child_rows]
@@ -910,10 +928,7 @@ async def get_lcm_stats(
             with open(_OPENCLAW_JSON) as _f:
                 _oc = json.load(_f)
             _lc_conf = (
-                _oc.get("plugins", {})
-                   .get("entries", {})
-                   .get("lossless-claw", {})
-                   .get("config", {})
+                _oc.get("plugins", {}).get("entries", {}).get("lossless-claw", {}).get("config", {})
             )
             fresh_tail_count = int(_lc_conf.get("freshTailCount", _DEFAULT_FRESH_TAIL))
             leaf_chunk_tokens = int(_lc_conf.get("leafChunkTokens", _DEFAULT_LEAF_CHUNK_TOKENS))
@@ -1127,17 +1142,19 @@ async def get_lcm_stats(
                     continue
                 m = msg_map.get(sk, {"message_count": 0, "token_count": 0})
                 sm = summary_map.get(sk, {"leaf": 0, "condensed": 0})
-                sessions.append(LCMSessionProgress(
-                    session_key=sk,
-                    agent_name=name,
-                    message_count=m["message_count"],
-                    token_count=m["token_count"],
-                    leaf_count=sm["leaf"],
-                    condensed_count=sm["condensed"],
-                    processed_messages=processed_map.get(sk, 0),
-                    last_updated=last_map.get(sk),
-                    raw_tokens_outside_tail=raw_tokens_map.get(sk, 0),
-                ))
+                sessions.append(
+                    LCMSessionProgress(
+                        session_key=sk,
+                        agent_name=name,
+                        message_count=m["message_count"],
+                        token_count=m["token_count"],
+                        leaf_count=sm["leaf"],
+                        condensed_count=sm["condensed"],
+                        processed_messages=processed_map.get(sk, 0),
+                        last_updated=last_map.get(sk),
+                        raw_tokens_outside_tail=raw_tokens_map.get(sk, 0),
+                    )
+                )
             sessions.sort(key=lambda x: -x.message_count)
         else:
             sessions = []
@@ -1240,7 +1257,11 @@ async def get_memos_dashboard() -> dict:
             LIMIT 5
         """)
         recent_superseded = [
-            {"id": str(r["id"]), "superseded_by": str(r["superseded_by"]), "superseded_at": r["superseded_at"]}
+            {
+                "id": str(r["id"]),
+                "superseded_by": str(r["superseded_by"]),
+                "superseded_at": r["superseded_at"],
+            }
             for r in cursor.fetchall()
         ]
         supersession = {
@@ -1249,7 +1270,9 @@ async def get_memos_dashboard() -> dict:
         }
 
         # Memory graph stats
-        cursor.execute("SELECT COUNT(DISTINCT src_chunk_id) + COUNT(DISTINCT tgt_chunk_id) as nodes FROM memory_graph")
+        cursor.execute(
+            "SELECT COUNT(DISTINCT src_chunk_id) + COUNT(DISTINCT tgt_chunk_id) as nodes FROM memory_graph"
+        )
         graph_nodes_row = cursor.fetchone()
         cursor.execute("SELECT COUNT(*) as edges FROM memory_graph")
         graph_edges_row = cursor.fetchone()
@@ -1343,13 +1366,15 @@ async def get_memos_dashboard() -> dict:
                 ORDER BY last_active_at DESC
             """)
             for r in lcm_cursor.fetchall():
-                ob_sessions.append({
-                    "conversation_id": r["conversation_id"],
-                    "session_key": str(r["session_key"]),
-                    "title": str(r["title"] or ""),
-                    "msg_count": int(r["msg_count"] or 0),
-                    "last_active_at": r["last_active_at"],
-                })
+                ob_sessions.append(
+                    {
+                        "conversation_id": r["conversation_id"],
+                        "session_key": str(r["session_key"]),
+                        "title": str(r["title"] or ""),
+                        "msg_count": int(r["msg_count"] or 0),
+                        "last_active_at": r["last_active_at"],
+                    }
+                )
         finally:
             lcm_conn.close()
     except HTTPException:

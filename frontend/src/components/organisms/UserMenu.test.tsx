@@ -26,11 +26,7 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("next/link", () => ({
-  default: ({
-    children,
-    href,
-    ...rest
-  }: LinkProps) => (
+  default: ({ children, href, ...rest }: LinkProps) => (
     <a href={typeof href === "string" ? href : "#"} {...rest}>
       {children}
     </a>

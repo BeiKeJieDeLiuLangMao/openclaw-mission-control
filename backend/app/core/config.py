@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # OpenClaw gateway runtime compatibility
     gateway_min_version: str = "2026.02.9"
 
+    # OpenClaw Usage API integration
+    openclaw_api_url: str = "http://127.0.0.1:18789"
+    openclaw_api_timeout: int = 30
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "text"

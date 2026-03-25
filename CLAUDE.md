@@ -94,6 +94,35 @@ cd frontend && npm run dev
 make frontend-build    # 或: cd frontend && npm run build
 ```
 
+### MC 自用 Mac 开机自启 (launchd)
+
+> 以下为本地 MC 开发环境的 launchd 配置，适用于非 Docker 模式。
+> 配置文件在 `~/Library/LaunchAgents/`，登录后自动启动前后端服务。
+
+| 服务 | plist 文件 | 端口 |
+|---|---|---|
+| Backend (FastAPI) | `ai.openclaw.mc.backend.plist` | 8000 |
+| Frontend (Next.js) | `ai.openclaw.mc.frontend.plist` | 3000 |
+
+```bash
+# 查看服务状态
+launchctl list | grep ai.openclaw.mc
+
+# 重新加载服务 (修改 plist 后需执行)
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.mc.backend.plist
+launchctl unload ~/Library/LaunchAgents/ai.openclaw.mc.frontend.plist
+launchctl load ~/Library/LaunchAgents/ai.openclaw.mc.backend.plist
+launchctl load ~/Library/LaunchAgents/ai.openclaw.mc.frontend.plist
+
+# 查看日志
+cat ~/.openclaw/logs/mc-backend.log
+cat ~/.openclaw/logs/mc-backend-error.log
+cat ~/.openclaw/logs/mc-frontend.log
+cat ~/.openclaw/logs/mc-frontend-error.log
+```
+
+> 注意：LaunchAgents 在**用户登录后**启动，非机器开机。如需开机即启动需用 LaunchDaemons。
+
 ### API 客户端生成
 ```bash
 # 修改后端 API 后,重新生成前端 API 客户端

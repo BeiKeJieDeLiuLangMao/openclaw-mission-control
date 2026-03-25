@@ -22,7 +22,12 @@ describe("TaskCard", () => {
 
   it("shows blocked state with count", () => {
     render(
-      <TaskCard title="Blocked task" isBlocked blockedByCount={2} priority="low" />,
+      <TaskCard
+        title="Blocked task"
+        isBlocked
+        blockedByCount={2}
+        priority="low"
+      />,
     );
 
     expect(screen.getByText(/Blocked · 2/i)).toBeInTheDocument();
@@ -41,7 +46,9 @@ describe("TaskCard", () => {
   });
 
   it("shows lead review indicator when status is review with no approvals and not blocked", () => {
-    render(<TaskCard title="Waiting" status="review" approvalsPendingCount={0} />);
+    render(
+      <TaskCard title="Waiting" status="review" approvalsPendingCount={0} />,
+    );
 
     expect(screen.getByText(/Waiting for lead review/i)).toBeInTheDocument();
   });

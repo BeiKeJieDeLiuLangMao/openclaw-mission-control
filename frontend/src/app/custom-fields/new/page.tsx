@@ -16,7 +16,7 @@ import {
 import {
   getListOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGetQueryKey,
   useCreateOrgCustomFieldApiV1OrganizationsMeCustomFieldsPost,
-} from "@/api/generated/org-custom-fields/org-custom-fields";
+} from "@/api/generated/custom-fields/custom-fields";
 import { CustomFieldForm } from "@/components/custom-fields/CustomFieldForm";
 import { DEFAULT_CUSTOM_FIELD_FORM_STATE } from "@/components/custom-fields/custom-field-form-types";
 import {

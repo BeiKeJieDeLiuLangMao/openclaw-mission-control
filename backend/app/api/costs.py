@@ -1,26 +1,27 @@
-"""Cost tracking endpoints for token and cost metrics."""
+"""Cost tracking endpoints using OpenClaw Gateway RPC API.
+
+This module provides improved cost tracking by integrating with the OpenClaw Gateway's
+WebSocket RPC API (usage.cost method), which provides accurate model-level cost breakdowns.
+
+As a fallback, it also supports the HTTP-based OpenClawClient when Gateway RPC is unavailable.
+"""
 
 from __future__ import annotations
 
-import sqlite3
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Literal
-from uuid import UUID
+from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import DateTime, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.deps import require_org_member
-from app.core.config import settings
+from app.core.logging import get_logger
 from app.db.session import get_session
 from app.models.agents import Agent
+from app.models.gateways import Gateway
 from app.schemas.costs import (
     AgentCostBreakdown,
-    AgentDailyPoint,
     CostBucketKey,
     CostKpis,
     CostMetrics,
@@ -28,20 +29,18 @@ from app.schemas.costs import (
     DailyCostPoint,
     ModelCostBreakdown,
 )
+from app.services.openclaw.gateway_resolver import gateway_client_config
+from app.services.openclaw.gateway_rpc import (
+    GatewayConfig,
+    OpenClawGatewayError,
+    openclaw_call,
+)
+from app.services.openclaw_client import OpenClawAPIError, OpenClawClient
 from app.services.organizations import OrganizationContext
 
+logger = get_logger("app.api.costs")
+
 router = APIRouter(prefix="/costs", tags=["costs"])
-
-# LCM 数据库路径
-LCM_DB_PATH = Path.home() / ".openclaw" / "lcm.db"
-
-# 模型定价（每百万 token，美元）
-MODEL_PRICING = {
-    "fai/claude-sonnet-4-6": {"input": 0.8, "output": 2.0},
-    "fai/claude-opus-4-6": {"input": 0.8, "output": 2.0},
-    # 其他模型使用默认定价
-    "default": {"input": 0.8, "output": 2.0},
-}
 
 # 默认查询范围
 RANGE_QUERY = Query(default="7d")
@@ -49,259 +48,40 @@ ORG_MEMBER_DEP = Depends(require_org_member)
 SESSION_DEP = Depends(get_session)
 
 
-def _get_model_pricing(model: str | None) -> dict[str, float]:
-    """获取模型定价，如果模型不在列表中则使用默认定价。"""
-    if model and model in MODEL_PRICING:
-        return MODEL_PRICING[model]
-    return MODEL_PRICING["default"]
+def _resolve_cost_range(range_key: CostRangeKey) -> tuple[int, str]:
+    """解析时间范围，返回 (天数, 桶粒度).
 
+    Args:
+        range_key: 时间范围键 (如 "7d", "1m")
 
-def _resolve_cost_range(range_key: CostRangeKey) -> tuple[datetime, datetime, CostBucketKey]:
-    """解析时间范围，返回 (开始时间, 结束时间, 桶粒度)。"""
-    now = datetime.now()
-    specs: dict[CostRangeKey, tuple[timedelta, CostBucketKey]] = {
-        "7d": (timedelta(days=7), "day"),
-        "14d": (timedelta(days=14), "day"),
-        "1m": (timedelta(days=30), "day"),
-        "3m": (timedelta(days=90), "week"),
-        "6m": (timedelta(days=180), "week"),
-        "1y": (timedelta(days=365), "month"),
+    Returns:
+        (天数, 桶粒度) 元组
+    """
+    specs: dict[CostRangeKey, tuple[int, CostBucketKey]] = {
+        "7d": (7, "day"),
+        "14d": (14, "day"),
+        "1m": (30, "day"),
+        "3m": (90, "week"),
+        "6m": (180, "week"),
+        "1y": (365, "month"),
     }
-    duration, bucket = specs[range_key]
-    return (now - duration, now, bucket)
+    return specs[range_key]
 
 
-def _parse_date(date_str: str) -> datetime | None:
-    """解析 ISO 格式的日期字符串。"""
-    if not date_str:
-        return None
-    try:
-        # 尝试多种 ISO 格式
-        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(date_str.split("+")[0].split("Z")[0].strip(), fmt)
-            except ValueError:
-                continue
-        return None
-    except Exception:
-        return None
+def _format_model_key(provider: str | None, model: str | None) -> str:
+    """格式化模型键为可读的字符串.
 
+    Args:
+        provider: 提供商名称 (如 "anthropic")
+        model: 模型名称 (如 "claude-sonnet-4-6")
 
-def _format_date(dt: datetime) -> str:
-    """格式化日期为 YYYY-MM-DD。"""
-    return dt.strftime("%Y-%m-%d")
-
-
-def _get_lcm_connection() -> sqlite3.Connection:
-    """获取 LCM 数据库连接。"""
-    if not LCM_DB_PATH.exists():
-        raise HTTPException(
-            status_code=503,
-            detail=f"LCM database not found at {LCM_DB_PATH}",
-        )
-    try:
-        conn = sqlite3.connect(str(LCM_DB_PATH))
-        conn.row_factory = sqlite3.Row
-        return conn
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Failed to connect to LCM database: {str(e)}",
-        )
-
-
-def _query_daily_costs(
-    conn: sqlite3.Connection,
-    start_date: datetime,
-    end_date: datetime,
-) -> list[DailyCostPoint]:
-    """查询每日成本数据。
-
-    注意：created_at 存储的是 UTC 时间，需要转换为北京时间 (+8 小时) 来分组。
+    Returns:
+        格式化的模型字符串
     """
-    # 使用 SQLite 的 date 函数和 datetime 修正时区
-    query = """
-    SELECT
-        date(datetime(created_at, '+8 hours')) as date,
-        SUM(CASE WHEN role IN ('user', 'system') THEN token_count ELSE 0 END) as input_tokens,
-        SUM(CASE WHEN role = 'assistant' THEN token_count ELSE 0 END) as output_tokens,
-        COUNT(DISTINCT conversation_id) as conversations_count,
-        COUNT(*) as messages_count
-    FROM messages
-    WHERE created_at >= ? AND created_at <= ?
-    GROUP BY date(datetime(created_at, '+8 hours'))
-    ORDER BY date
-    """
-
-    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
-
-    cursor = conn.execute(query, (start_str, end_str))
-    rows = cursor.fetchall()
-
-    daily_points = []
-    for row in rows:
-        input_tokens = row["input_tokens"] or 0
-        output_tokens = row["output_tokens"] or 0
-        total_tokens = input_tokens + output_tokens
-
-        # 计算成本（美元）
-        input_cost_usd = (input_tokens / 1_000_000) * MODEL_PRICING["default"]["input"]
-        output_cost_usd = (output_tokens / 1_000_000) * MODEL_PRICING["default"]["output"]
-        total_cost_usd = input_cost_usd + output_cost_usd
-
-        daily_points.append(
-            DailyCostPoint(
-                date=row["date"],
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                input_cost_usd=round(input_cost_usd, 4),
-                output_cost_usd=round(output_cost_usd, 4),
-                total_cost_usd=round(total_cost_usd, 4),
-                conversations_count=row["conversations_count"],
-                messages_count=row["messages_count"],
-            )
-        )
-
-    return daily_points
-
-
-def _query_model_breakdown(
-    conn: sqlite3.Connection,
-    start_date: datetime,
-    end_date: datetime,
-) -> list[ModelCostBreakdown]:
-    """查询按模型分组的成本数据。
-
-    注意：由于 messages 表没有 model 字段，这里我们返回一个基于 role 的简化版本。
-    """
-    # 由于 lcm.db 的 messages 表没有存储模型信息，我们按 role 分组作为替代
-    query = """
-    SELECT
-        role as model,
-        SUM(token_count) as total_tokens,
-        COUNT(DISTINCT conversation_id) as conversations_count,
-        COUNT(*) as messages_count
-    FROM messages
-    WHERE created_at >= ? AND created_at <= ?
-    GROUP BY role
-    ORDER BY total_tokens DESC
-    """
-
-    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
-
-    cursor = conn.execute(query, (start_str, end_str))
-    rows = cursor.fetchall()
-
-    breakdowns = []
-    for row in rows:
-        role = row["model"]
-        total_tokens = row["total_tokens"] or 0
-
-        # 根据 role 估算 input/output 比例
-        if role == "assistant":
-            input_tokens = 0
-            output_tokens = total_tokens
-            pricing = MODEL_PRICING["default"]
-            input_cost_usd = 0
-            output_cost_usd = (total_tokens / 1_000_000) * pricing["output"]
-        elif role in ("user", "system"):
-            input_tokens = total_tokens
-            output_tokens = 0
-            pricing = MODEL_PRICING["default"]
-            input_cost_usd = (total_tokens / 1_000_000) * pricing["input"]
-            output_cost_usd = 0
-        else:  # tool
-            input_tokens = total_tokens
-            output_tokens = 0
-            pricing = MODEL_PRICING["default"]
-            input_cost_usd = (total_tokens / 1_000_000) * pricing["input"]
-            output_cost_usd = 0
-
-        total_cost_usd = input_cost_usd + output_cost_usd
-
-        breakdowns.append(
-            ModelCostBreakdown(
-                model=role,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                input_cost_usd=round(input_cost_usd, 4),
-                output_cost_usd=round(output_cost_usd, 4),
-                total_cost_usd=round(total_cost_usd, 4),
-                conversations_count=row["conversations_count"],
-                messages_count=row["messages_count"],
-            )
-        )
-
-    return breakdowns
-
-
-def _calculate_kpis(
-    daily_points: list[DailyCostPoint],
-    model_breakdowns: list[ModelCostBreakdown],
-) -> CostKpis:
-    """计算 KPI 指标。"""
-    total_cost_usd = sum(p.total_cost_usd for p in daily_points)
-    total_tokens = sum(p.total_tokens for p in daily_points)
-    input_tokens = sum(p.input_tokens for p in daily_points)
-    output_tokens = sum(p.output_tokens for p in daily_points)
-    conversations_count = sum(p.conversations_count for p in daily_points)
-    messages_count = sum(p.messages_count for p in daily_points)
-
-    days_count = len(daily_points) or 1
-    avg_daily_cost_usd = total_cost_usd / days_count
-    avg_daily_tokens = total_tokens / days_count
-
-    # 找到成本最高的模型
-    top_model_by_cost = None
-    if model_breakdowns:
-        top_model_by_cost = max(model_breakdowns, key=lambda x: x.total_cost_usd).model
-
-    return CostKpis(
-        total_cost_usd=round(total_cost_usd, 4),
-        total_tokens=total_tokens,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        conversations_count=conversations_count,
-        messages_count=messages_count,
-        avg_daily_cost_usd=round(avg_daily_cost_usd, 4),
-        avg_daily_tokens=int(avg_daily_tokens),
-        top_model_by_cost=top_model_by_cost,
-    )
-
-
-def _parse_session_key(session_key: str) -> str:
-    """从 session_key 解析出 agent_id。
-
-    解析规则:
-    - agent:mc-{uuid}:main → uuid (mc agent)
-    - agent:mc-{uuid}:ob → uuid (observer session)
-    - agent:lead-{boardId}:main → "lead"
-    - agent:main:* → "system"
-    - 其他 → "unknown"
-    """
-    if not session_key:
-        return "unknown"
-
-    parts = session_key.split(":")
-    if len(parts) < 3:
-        return "unknown"
-
-    # agent:mc-{uuid}:main 或 agent:mc-{uuid}:ob
-    if parts[1].startswith("mc-"):
-        return parts[1][3:]  # 去掉 "mc-" 前缀
-
-    # agent:lead-{boardId}:main
-    if parts[1].startswith("lead-"):
-        return "lead"
-
-    # agent:main:*
-    if parts[1] == "main":
-        return "system"
-
+    if model:
+        if provider and provider != "unknown":
+            return f"{provider}/{model}"
+        return model
     return "unknown"
 
 
@@ -309,137 +89,273 @@ async def _fetch_agent_names(
     session: AsyncSession,
     agent_ids: set[str],
 ) -> dict[str, str]:
-    """从数据库批量获取 agent 名称。
+    """从数据库批量获取 agent 名称.
 
     Args:
         session: AsyncSession
         agent_ids: 需要查询的 agent_id 集合 (UUID 字符串)
 
     Returns:
-        agent_id -> agent_name 的映射,如果查询失败返回空字典
+        agent_id -> agent_name 的映射
     """
     if not agent_ids:
         return {}
 
     try:
-        # 过滤出有效的 UUID
-        valid_uuids = set()
-        for agent_id in agent_ids:
-            try:
-                UUID(agent_id)
-                valid_uuids.add(agent_id)
-            except ValueError:
-                # 不是有效的 UUID,跳过
-                continue
+        # 过滤出有效的 UUID 并排除 system
+        valid_uuids = {
+            agent_id
+            for agent_id in agent_ids
+            if agent_id != "system" and len(agent_id) == 36  # UUID 长度
+        }
+
+        names: dict[str, str] = {}
+
+        # 添加 system 的名称
+        if "system" in agent_ids:
+            names["system"] = "System"
 
         if not valid_uuids:
-            return {}
+            return names
 
         # 批量查询
         statement = select(Agent).where(col(Agent.id).in_(valid_uuids))
         results = await session.execute(statement)
         agents = results.scalars().all()
 
-        return {str(agent.id): agent.name for agent in agents}
-    except Exception:
-        # 查询失败时返回空字典
+        # 添加查询到的 agent 名称
+        names.update({str(agent.id): agent.name for agent in agents})
+
+        return names
+    except Exception as e:
+        logger.error(f"Failed to fetch agent names: {e}")
         return {}
 
 
-def _query_agent_breakdown(
-    conn: sqlite3.Connection,
-    start_date: datetime,
-    end_date: datetime,
-) -> list[dict]:
-    """按 agent 聚合 token/成本数据。"""
-    query = """
-    SELECT
-        c.session_key,
-        SUM(CASE WHEN m.role IN ('user', 'system') THEN m.token_count ELSE 0 END) as input_tokens,
-        SUM(CASE WHEN m.role = 'assistant' THEN m.token_count ELSE 0 END) as output_tokens,
-        COUNT(DISTINCT m.conversation_id) as conversations_count,
-        COUNT(*) as messages_count
-    FROM messages m
-    JOIN conversations c ON m.conversation_id = c.conversation_id
-    WHERE m.created_at >= ? AND m.created_at <= ?
-    GROUP BY c.session_key
-    ORDER BY (input_tokens + output_tokens) DESC
-    """
-    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
-    cursor = conn.execute(query, (start_str, end_str))
-    return [dict(row) for row in cursor.fetchall()]
-
-
-def _query_agent_daily(
-    conn: sqlite3.Connection,
-    start_date: datetime,
-    end_date: datetime,
-) -> list[dict]:
-    """按 agent + 日期聚合 token/成本数据（用于折线图）。"""
-    query = """
-    SELECT
-        date(datetime(m.created_at, '+8 hours')) as date,
-        c.session_key,
-        SUM(CASE WHEN m.role IN ('user', 'system') THEN m.token_count ELSE 0 END) as input_tokens,
-        SUM(CASE WHEN m.role = 'assistant' THEN m.token_count ELSE 0 END) as output_tokens,
-        COUNT(DISTINCT m.conversation_id) as conversations_count,
-        COUNT(*) as messages_count
-    FROM messages m
-    JOIN conversations c ON m.conversation_id = c.conversation_id
-    WHERE m.created_at >= ? AND m.created_at <= ?
-    GROUP BY date(datetime(m.created_at, '+8 hours')), c.session_key
-    ORDER BY date, c.session_key
-    """
-    start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
-    end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
-    cursor = conn.execute(query, (start_str, end_str))
-    return [dict(row) for row in cursor.fetchall()]
-
-
-def _aggregate_agent_breakdown(
-    raw_data: list[dict],
-    agent_names: dict[str, str],
-) -> list[AgentCostBreakdown]:
-    """聚合 agent 维度的成本数据。
+async def _get_default_gateway_config(
+    session: AsyncSession,
+    organization_id: str,
+) -> GatewayConfig | None:
+    """获取组织的默认 gateway 配置.
 
     Args:
-        raw_data: _query_agent_breakdown 返回的原始数据
-        agent_names: agent_id -> agent_name 的映射
+        session: 数据库会话
+        organization_id: 组织 ID
 
     Returns:
-        按 agent_id 聚合后的成本数据列表
+        GatewayConfig 如果找到 gateway，否则返回 None
     """
-    # 按 agent_id 聚合
-    agent_stats: dict[str, dict] = {}
+    try:
+        # 查询组织的第一个可用 gateway
+        statement = Gateway.objects.filter_by(organization_id=organization_id).statement
+        results = await session.execute(statement)
+        gateway = results.scalars().first()
 
-    for row in raw_data:
-        session_key = row["session_key"]
-        agent_id = _parse_session_key(session_key)
+        if gateway is None:
+            logger.warning("No gateway found for organization %s", organization_id)
+            return None
 
-        if agent_id not in agent_stats:
-            agent_stats[agent_id] = {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "conversations_count": 0,
-                "messages_count": 0,
-            }
+        return gateway_client_config(gateway)
+    except Exception as e:
+        logger.error("Failed to fetch gateway config: %s", e)
+        return None
 
-        agent_stats[agent_id]["input_tokens"] += row["input_tokens"] or 0
-        agent_stats[agent_id]["output_tokens"] += row["output_tokens"] or 0
-        agent_stats[agent_id]["conversations_count"] += row["conversations_count"]
-        agent_stats[agent_id]["messages_count"] += row["messages_count"]
 
-    # 转换为 AgentCostBreakdown 对象
+async def _fetch_cost_data_from_gateway(
+    config: GatewayConfig,
+    days: int,
+) -> dict[str, Any] | None:
+    """从 Gateway RPC 获取成本数据.
+
+    Args:
+        config: Gateway 配置
+        days: 查询天数
+
+    Returns:
+        Gateway 返回的原始数据，失败时返回 None
+    """
+    try:
+        params = {"days": days, "mode": "utc"}
+        data = await openclaw_call("usage.cost", params, config=config)
+        return data if isinstance(data, dict) else None
+    except OpenClawGatewayError as e:
+        logger.warning("Gateway RPC usage.cost failed: %s", e)
+        return None
+    except Exception as e:
+        logger.warning("Unexpected error calling usage.cost: %s", e)
+        return None
+
+
+def _convert_gateway_totals_to_kpis(
+    totals: dict[str, Any],
+    days_count: int,
+    model_breakdown: list[ModelCostBreakdown],
+) -> CostKpis:
+    """将 Gateway 的 totals 转换为 CostKpis.
+
+    Args:
+        totals: Gateway API 返回的 totals 字典
+        days_count: 天数
+        model_breakdown: 模型成本分解列表
+
+    Returns:
+        CostKpis 对象
+    """
+    total_tokens = totals.get("totalTokens", 0) or 0
+    input_tokens = totals.get("input", 0) or 0
+    output_tokens = totals.get("output", 0) or 0
+    cache_read_tokens = totals.get("cacheRead", 0) or 0
+    cache_write_tokens = totals.get("cacheWrite", 0) or 0
+    total_cost_usd = totals.get("totalCost", 0.0) or 0.0
+    missing_cost_entries = totals.get("missingCostEntries", 0) or 0
+
+    days_count = days_count or 1
+    avg_daily_cost_usd = total_cost_usd / days_count
+    avg_daily_tokens = total_tokens / days_count
+
+    # 找到成本最高的模型
+    top_model_by_cost = None
+    if model_breakdown:
+        top_model_by_cost = max(model_breakdown, key=lambda x: x.total_cost_usd).model
+
+    return CostKpis(
+        total_cost_usd=round(total_cost_usd, 4),
+        total_tokens=total_tokens,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        conversations_count=0,  # Gateway 不直接提供
+        messages_count=0,  # Gateway 不直接提供
+        avg_daily_cost_usd=round(avg_daily_cost_usd, 4),
+        avg_daily_tokens=int(avg_daily_tokens),
+        top_model_by_cost=top_model_by_cost,
+        missing_cost_entries=missing_cost_entries,
+    )
+
+
+def _convert_gateway_daily_to_daily_points(
+    daily_data: list[dict[str, Any]],
+) -> list[DailyCostPoint]:
+    """将 Gateway 的 daily 数据转换为 DailyCostPoint 列表.
+
+    Args:
+        daily_data: Gateway API 返回的每日数据列表
+
+    Returns:
+        DailyCostPoint 列表
+    """
+    points = []
+    for entry in daily_data:
+        total_tokens = entry.get("tokens", 0) or 0
+        cost = entry.get("cost", 0.0) or 0.0
+
+        # Gateway daily 数据可能只有 tokens 和 cost
+        # 使用 input/output breakdown 如果可用
+        input_cost = entry.get("inputCost", 0.0) or 0.0
+        output_cost = entry.get("outputCost", 0.0) or 0.0
+
+        points.append(
+            DailyCostPoint(
+                date=entry.get("date", ""),
+                input_tokens=entry.get("input", 0) or 0,
+                output_tokens=entry.get("output", 0) or 0,
+                cache_read_tokens=entry.get("cacheRead", 0) or 0,
+                cache_write_tokens=entry.get("cacheWrite", 0) or 0,
+                total_tokens=total_tokens,
+                input_cost_usd=round(input_cost, 4),
+                output_cost_usd=round(output_cost, 4),
+                cache_read_cost_usd=round(entry.get("cacheReadCost", 0.0) or 0.0, 4),
+                cache_write_cost_usd=round(entry.get("cacheWriteCost", 0.0) or 0.0, 4),
+                total_cost_usd=round(cost, 4),
+                conversations_count=0,
+                messages_count=0,
+            )
+        )
+
+    return points
+
+
+def _convert_gateway_model_breakdown(
+    model_usage: list[dict[str, Any]],
+) -> list[ModelCostBreakdown]:
+    """将 Gateway 的 byModel 数据转换为 ModelCostBreakdown 列表.
+
+    Args:
+        model_usage: Gateway API 返回的 byModel 数据
+
+    Returns:
+        ModelCostBreakdown 列表
+    """
     breakdowns = []
-    for agent_id, stats in agent_stats.items():
-        input_tokens = stats["input_tokens"]
-        output_tokens = stats["output_tokens"]
-        total_tokens = input_tokens + output_tokens
+    for entry in model_usage:
+        provider = entry.get("provider")
+        model = entry.get("model")
+        count = entry.get("count", 0) or 0
+        totals = entry.get("totals", {})
 
-        input_cost_usd = (input_tokens / 1_000_000) * MODEL_PRICING["default"]["input"]
-        output_cost_usd = (output_tokens / 1_000_000) * MODEL_PRICING["default"]["output"]
-        total_cost_usd = input_cost_usd + output_cost_usd
+        input_tokens = totals.get("input", 0) or 0
+        output_tokens = totals.get("output", 0) or 0
+        cache_read_tokens = totals.get("cacheRead", 0) or 0
+        cache_write_tokens = totals.get("cacheWrite", 0) or 0
+        total_tokens = totals.get("totalTokens", 0) or 0
+        input_cost_usd = totals.get("inputCost", 0.0) or 0.0
+        output_cost_usd = totals.get("outputCost", 0.0) or 0.0
+        cache_read_cost_usd = totals.get("cacheReadCost", 0.0) or 0.0
+        cache_write_cost_usd = totals.get("cacheWriteCost", 0.0) or 0.0
+        total_cost_usd = totals.get("totalCost", 0.0) or 0.0
+
+        breakdowns.append(
+            ModelCostBreakdown(
+                model=_format_model_key(provider, model),
+                provider=provider,
+                count=count,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+                total_tokens=total_tokens,
+                input_cost_usd=round(input_cost_usd, 4),
+                output_cost_usd=round(output_cost_usd, 4),
+                cache_read_cost_usd=round(cache_read_cost_usd, 4),
+                cache_write_cost_usd=round(cache_write_cost_usd, 4),
+                total_cost_usd=round(total_cost_usd, 4),
+                conversations_count=0,
+                messages_count=0,
+            )
+        )
+
+    return breakdowns
+
+
+def _convert_gateway_agent_breakdown(
+    by_agent: list[dict[str, Any]],
+    agent_names: dict[str, str],
+) -> list[AgentCostBreakdown]:
+    """将 Gateway 的 byAgent 数据转换为 AgentCostBreakdown 列表.
+
+    Args:
+        by_agent: Gateway API 返回的 byAgent 数据
+        agent_names: agent_id -> agent_name 映射
+
+    Returns:
+        AgentCostBreakdown 列表
+    """
+    breakdowns = []
+    for entry in by_agent:
+        agent_id = entry.get("agentId", "")
+        totals = entry.get("totals", {})
+
+        input_tokens = totals.get("input", 0) or 0
+        output_tokens = totals.get("output", 0) or 0
+        cache_read_tokens = totals.get("cacheRead", 0) or 0
+        cache_write_tokens = totals.get("cacheWrite", 0) or 0
+        total_tokens = totals.get("totalTokens", 0) or 0
+        input_cost_usd = totals.get("inputCost", 0.0) or 0.0
+        output_cost_usd = totals.get("outputCost", 0.0) or 0.0
+        cache_read_cost_usd = totals.get("cacheReadCost", 0.0) or 0.0
+        cache_write_cost_usd = totals.get("cacheWriteCost", 0.0) or 0.0
+        total_cost_usd = totals.get("totalCost", 0.0) or 0.0
 
         breakdowns.append(
             AgentCostBreakdown(
@@ -447,139 +363,323 @@ def _aggregate_agent_breakdown(
                 agent_name=agent_names.get(agent_id),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
                 total_tokens=total_tokens,
                 input_cost_usd=round(input_cost_usd, 4),
                 output_cost_usd=round(output_cost_usd, 4),
+                cache_read_cost_usd=round(cache_read_cost_usd, 4),
+                cache_write_cost_usd=round(cache_write_cost_usd, 4),
                 total_cost_usd=round(total_cost_usd, 4),
-                conversations_count=stats["conversations_count"],
-                messages_count=stats["messages_count"],
+                conversations_count=0,
+                messages_count=0,
             )
         )
 
-    # 按总成本降序排序
-    breakdowns.sort(key=lambda x: x.total_cost_usd, reverse=True)
     return breakdowns
 
 
-def _aggregate_agent_daily(
-    raw_data: list[dict],
-    agent_names: dict[str, str],
-) -> list[AgentDailyPoint]:
-    """聚合 agent + 日期维度的成本数据。
+async def _build_cost_metrics_from_gateway_data(
+    session: AsyncSession,
+    gateway_data: dict[str, Any],
+    days: int,
+    range_key: CostRangeKey,
+) -> CostMetrics:
+    """从 Gateway 返回的数据构建 CostMetrics。
 
     Args:
-        raw_data: _query_agent_daily 返回的原始数据
-        agent_names: agent_id -> agent_name 的映射
+        session: 数据库会话
+        gateway_data: Gateway RPC 返回的原始数据
+        days: 查询天数
+        range_key: 时间范围键
 
     Returns:
-        按 agent_id + date 聚合后的成本数据列表
+        CostMetrics 对象
     """
-    # 按 agent_id + date 聚合
-    agent_daily_stats: dict[str, dict] = {}
+    totals = gateway_data.get("totals", {})
+    by_model = gateway_data.get("byModel", [])
+    by_agent = gateway_data.get("byAgent", [])
+    daily = gateway_data.get("daily", [])
 
-    for row in raw_data:
-        session_key = row["session_key"]
-        agent_id = _parse_session_key(session_key)
-        date = row["date"]
-
-        key = f"{agent_id}:{date}"
-
-        if key not in agent_daily_stats:
-            agent_daily_stats[key] = {
-                "agent_id": agent_id,
-                "date": date,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "conversations_count": 0,
-                "messages_count": 0,
-            }
-
-        agent_daily_stats[key]["input_tokens"] += row["input_tokens"] or 0
-        agent_daily_stats[key]["output_tokens"] += row["output_tokens"] or 0
-        agent_daily_stats[key]["conversations_count"] += row["conversations_count"]
-        agent_daily_stats[key]["messages_count"] += row["messages_count"]
-
-    # 转换为 AgentDailyPoint 对象
-    daily_points = []
-    for stats in agent_daily_stats.values():
-        input_tokens = stats["input_tokens"]
-        output_tokens = stats["output_tokens"]
-        total_tokens = input_tokens + output_tokens
-
-        input_cost_usd = (input_tokens / 1_000_000) * MODEL_PRICING["default"]["input"]
-        output_cost_usd = (output_tokens / 1_000_000) * MODEL_PRICING["default"]["output"]
-        total_cost_usd = input_cost_usd + output_cost_usd
-
-        daily_points.append(
-            AgentDailyPoint(
-                date=stats["date"],
-                agent_id=stats["agent_id"],
-                agent_name=agent_names.get(stats["agent_id"]),
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                total_tokens=total_tokens,
-                input_cost_usd=round(input_cost_usd, 4),
-                output_cost_usd=round(output_cost_usd, 4),
-                total_cost_usd=round(total_cost_usd, 4),
-                conversations_count=stats["conversations_count"],
-                messages_count=stats["messages_count"],
-            )
-        )
-
-    # 按日期排序
-    daily_points.sort(key=lambda x: (x.date, x.agent_id))
-    return daily_points
-
-
-@router.get("/metrics", response_model=CostMetrics)
-async def cost_metrics(
-    range_key: CostRangeKey = RANGE_QUERY,
-    session: AsyncSession = SESSION_DEP,
-    ctx: OrganizationContext = ORG_MEMBER_DEP,
-) -> CostMetrics:
-    """返回成本追踪 KPI 和时间序列数据。
-
-    从 lcm.db 读取 token 使用数据，计算美元成本。
-    """
-    start_date, end_date, bucket = _resolve_cost_range(range_key)
-
-    conn = _get_lcm_connection()
-    try:
-        daily_points = _query_daily_costs(conn, start_date, end_date)
-        model_breakdowns = _query_model_breakdown(conn, start_date, end_date)
-
-        # 查询 agent 维度数据
-        agent_breakdown_raw = _query_agent_breakdown(conn, start_date, end_date)
-        agent_daily_raw = _query_agent_daily(conn, start_date, end_date)
-    finally:
-        conn.close()
-
-    # 收集所有需要查询名称的 agent_id
-    agent_ids = set()
-    for row in agent_breakdown_raw:
-        agent_id = _parse_session_key(row["session_key"])
-        if agent_id and agent_id not in ("lead", "system", "unknown"):
-            agent_ids.add(agent_id)
-    for row in agent_daily_raw:
-        agent_id = _parse_session_key(row["session_key"])
-        if agent_id and agent_id not in ("lead", "system", "unknown"):
-            agent_ids.add(agent_id)
-
-    # 批量获取 agent 名称
+    # 获取 agent IDs 并查询名称
+    agent_ids = {
+        entry.get("agentId")
+        for entry in by_agent
+        if entry.get("agentId") and entry.get("agentId") != "unknown"
+    }
     agent_names = await _fetch_agent_names(session, agent_ids)
 
-    # 聚合 agent 维度数据
-    agent_breakdowns = _aggregate_agent_breakdown(agent_breakdown_raw, agent_names)
-    agent_daily_series = _aggregate_agent_daily(agent_daily_raw, agent_names)
-
-    kpis = _calculate_kpis(daily_points, model_breakdowns)
+    # 构建响应
+    model_breakdown = _convert_gateway_model_breakdown(by_model)
+    kpis = _convert_gateway_totals_to_kpis(totals, days, model_breakdown)
+    daily_series = _convert_gateway_daily_to_daily_points(daily)
 
     return CostMetrics(
         range=range_key,
         generated_at=datetime.now(),
         kpis=kpis,
-        daily_series=daily_points,
-        model_breakdown=model_breakdowns,
-        agent_breakdown=agent_breakdowns,
-        agent_daily_series=agent_daily_series,
+        daily_series=daily_series,
+        model_breakdown=model_breakdown,
+        agent_breakdown=_convert_gateway_agent_breakdown(by_agent, agent_names),
+        agent_daily_series=[],  # 暂不实现
     )
+
+
+async def _get_cost_metrics_fallback(
+    range_key: CostRangeKey,
+    session: AsyncSession,
+    organization_id: str,
+) -> CostMetrics:
+    """使用 HTTP 客户端作为 fallback 获取成本数据。
+
+    Args:
+        range_key: 时间范围
+        session: 数据库会话
+        organization_id: 组织 ID
+
+    Returns:
+        CostMetrics 对象
+    """
+    client = OpenClawClient()
+    days, _ = _resolve_cost_range(range_key)
+
+    try:
+        # 从 OpenClaw HTTP API 获取 sessions.usage 数据
+        data = await client.get_sessions_usage(days=days, limit=1000)
+
+        totals = data.get("totals", {})
+        aggregates = data.get("aggregates", {})
+
+        # 获取 agent IDs 并查询名称
+        by_agent = aggregates.get("byAgent", [])
+        agent_ids = {
+            entry.get("agentId")
+            for entry in by_agent
+            if entry.get("agentId") and entry.get("agentId") != "unknown"
+        }
+        agent_names = await _fetch_agent_names(session, agent_ids)
+
+        # 构建响应
+        model_breakdown = _convert_gateway_model_breakdown(
+            aggregates.get("byModel", [])
+        )
+        kpis = _convert_gateway_totals_to_kpis(totals, days, model_breakdown)
+
+        # 构建 daily series - 使用 modelDaily 数据
+        model_daily = aggregates.get("modelDaily", [])
+        daily_series = []
+        if model_daily:
+            # 按 date 分组聚合
+            daily_map: dict[str, dict[str, Any]] = {}
+            for entry in model_daily:
+                date = entry.get("date", "")
+                if date not in daily_map:
+                    daily_map[date] = {"date": date, "tokens": 0, "cost": 0.0}
+                daily_map[date]["tokens"] += entry.get("tokens", 0) or 0
+                daily_map[date]["cost"] += entry.get("cost", 0.0) or 0.0
+
+            daily_series = [
+                DailyCostPoint(
+                    date=entry["date"],
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=entry["tokens"],
+                    input_cost_usd=0.0,
+                    output_cost_usd=0.0,
+                    total_cost_usd=round(entry["cost"], 4),
+                    conversations_count=0,
+                    messages_count=0,
+                )
+                for entry in sorted(daily_map.values(), key=lambda x: x["date"])
+            ]
+
+        return CostMetrics(
+            range=range_key,
+            generated_at=datetime.now(),
+            kpis=kpis,
+            daily_series=daily_series,
+            model_breakdown=model_breakdown,
+            agent_breakdown=_convert_gateway_agent_breakdown(by_agent, agent_names),
+            agent_daily_series=[],  # 暂不实现
+        )
+
+    except OpenClawAPIError as e:
+        logger.error("OpenClaw HTTP API error: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to fetch cost data from OpenClaw: {str(e)}",
+        ) from e
+    finally:
+        await client.close()
+
+
+@router.get("/metrics", response_model=CostMetrics)
+async def get_cost_metrics(
+    range: CostRangeKey = RANGE_QUERY,
+    session: AsyncSession = SESSION_DEP,
+    ctx: OrganizationContext = ORG_MEMBER_DEP,
+) -> CostMetrics:
+    """获取成本指标。
+
+    通过 OpenClaw Gateway RPC (usage.cost) 获取准确的模型级别成本数据。
+    如果 Gateway RPC 不可用，则降级到 HTTP API。
+
+    Args:
+        range: 时间范围 (7d, 14d, 1m, 3m, 6m, 1y)
+        session: 数据库会话
+        ctx: 组织上下文
+
+    Returns:
+        CostMetrics 包含 KPI、每日序列和模型/agent 分解
+    """
+    days, _ = _resolve_cost_range(range)
+
+    # 1. 首先尝试使用 Gateway RPC
+    gateway_config = await _get_default_gateway_config(
+        session, str(ctx.organization.id)
+    )
+
+    if gateway_config is not None:
+        gateway_data = await _fetch_cost_data_from_gateway(gateway_config, days)
+        if gateway_data is not None:
+            logger.info("Using Gateway RPC for cost data (org=%s)", ctx.organization.id)
+            return await _build_cost_metrics_from_gateway_data(
+                session, gateway_data, days, range
+            )
+        else:
+            logger.warning(
+                "Gateway RPC failed for org=%s, falling back to HTTP API",
+                ctx.organization.id,
+            )
+    else:
+        logger.info(
+            "No gateway configured for org=%s, using HTTP API", ctx.organization.id
+        )
+
+    # 2. Fallback: 使用 HTTP API
+    return await _get_cost_metrics_fallback(range, session, str(ctx.organization.id))
+
+
+@router.get("/models", response_model=list[ModelCostBreakdown])
+async def get_model_costs(
+    range: CostRangeKey = RANGE_QUERY,
+    session: AsyncSession = SESSION_DEP,
+    ctx: OrganizationContext = ORG_MEMBER_DEP,
+) -> list[ModelCostBreakdown]:
+    """获取按模型分组的成本数据。
+
+    Args:
+        range: 时间范围
+        session: 数据库会话
+        ctx: 组织上下文
+
+    Returns:
+        模型成本分解列表
+    """
+    days, _ = _resolve_cost_range(range)
+
+    # 1. 首先尝试使用 Gateway RPC
+    gateway_config = await _get_default_gateway_config(
+        session, str(ctx.organization.id)
+    )
+
+    if gateway_config is not None:
+        gateway_data = await _fetch_cost_data_from_gateway(gateway_config, days)
+        if gateway_data is not None:
+            logger.info(
+                "Using Gateway RPC for model costs (org=%s)", ctx.organization.id
+            )
+            return _convert_gateway_model_breakdown(gateway_data.get("byModel", []))
+
+    # 2. Fallback: 使用 HTTP API
+    logger.info(
+        "Falling back to HTTP API for model costs (org=%s)", ctx.organization.id
+    )
+    client = OpenClawClient()
+
+    try:
+        data = await client.get_sessions_usage(days=days, limit=1000)
+        aggregates = data.get("aggregates", {})
+
+        return _convert_gateway_model_breakdown(aggregates.get("byModel", []))
+
+    except OpenClawAPIError as e:
+        logger.error("OpenClaw HTTP API error: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to fetch model costs: {str(e)}",
+        ) from e
+    finally:
+        await client.close()
+
+
+@router.get("/agents", response_model=list[AgentCostBreakdown])
+async def get_agent_costs(
+    range: CostRangeKey = RANGE_QUERY,
+    session: AsyncSession = SESSION_DEP,
+    ctx: OrganizationContext = ORG_MEMBER_DEP,
+) -> list[AgentCostBreakdown]:
+    """获取按 agent 分组的成本数据。
+
+    Args:
+        range: 时间范围
+        session: 数据库会话
+        ctx: 组织上下文
+
+    Returns:
+        Agent 成本分解列表
+    """
+    days, _ = _resolve_cost_range(range)
+
+    # 1. 首先尝试使用 Gateway RPC
+    gateway_config = await _get_default_gateway_config(
+        session, str(ctx.organization.id)
+    )
+
+    if gateway_config is not None:
+        gateway_data = await _fetch_cost_data_from_gateway(gateway_config, days)
+        if gateway_data is not None:
+            logger.info(
+                "Using Gateway RPC for agent costs (org=%s)", ctx.organization.id
+            )
+            by_agent = gateway_data.get("byAgent", [])
+
+            # 获取 agent 名称
+            agent_ids = {
+                entry.get("agentId")
+                for entry in by_agent
+                if entry.get("agentId") and entry.get("agentId") != "unknown"
+            }
+            agent_names = await _fetch_agent_names(session, agent_ids)
+
+            return _convert_gateway_agent_breakdown(by_agent, agent_names)
+
+    # 2. Fallback: 使用 HTTP API
+    logger.info(
+        "Falling back to HTTP API for agent costs (org=%s)", ctx.organization.id
+    )
+    client = OpenClawClient()
+
+    try:
+        data = await client.get_sessions_usage(days=days, limit=1000)
+        aggregates = data.get("aggregates", {})
+        by_agent = aggregates.get("byAgent", [])
+
+        # 获取 agent 名称
+        agent_ids = {
+            entry.get("agentId")
+            for entry in by_agent
+            if entry.get("agentId") and entry.get("agentId") != "unknown"
+        }
+        agent_names = await _fetch_agent_names(session, agent_ids)
+
+        return _convert_gateway_agent_breakdown(by_agent, agent_names)
+
+    except OpenClawAPIError as e:
+        logger.error("OpenClaw HTTP API error: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Failed to fetch agent costs: {str(e)}",
+        ) from e
+    finally:
+        await client.close()

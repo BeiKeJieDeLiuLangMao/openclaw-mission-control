@@ -95,8 +95,12 @@ function StatCard({
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-slate-900">{value.toLocaleString()}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-bold text-slate-900">
+        {value.toLocaleString()}
+      </p>
       {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
     </div>
   );
@@ -139,21 +143,37 @@ function SessionTable({
         <tbody className="divide-y divide-slate-100">
           {sessions.map((s) => {
             // 压缩进度
-            const compressible = Math.max(s.message_count - freshTailCount, s.processed_messages);
-            const pct = compressible > 0
-              ? Math.min(Math.round((s.processed_messages / compressible) * 100), 100)
-              : 0;
+            const compressible = Math.max(
+              s.message_count - freshTailCount,
+              s.processed_messages,
+            );
+            const pct =
+              compressible > 0
+                ? Math.min(
+                    Math.round((s.processed_messages / compressible) * 100),
+                    100,
+                  )
+                : 0;
             const pctColor =
-              pct >= 80 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-slate-300";
+              pct >= 80
+                ? "bg-emerald-500"
+                : pct >= 50
+                  ? "bg-amber-400"
+                  : "bg-slate-300";
             const compressTooltip = `最近 ${freshTailCount} 条消息为 freshTail 缓冲区，不计入压缩进度。`;
 
             // 待压缩 token 水位（vs leafChunkTokens 阈值）
             const rawTokens = s.raw_tokens_outside_tail ?? 0;
-            const tokenPct = Math.min(Math.round((rawTokens / leafChunkTokens) * 100), 100);
+            const tokenPct = Math.min(
+              Math.round((rawTokens / leafChunkTokens) * 100),
+              100,
+            );
             const tokenColor =
-              tokenPct >= 100 ? "bg-rose-500"
-              : tokenPct >= 70 ? "bg-amber-400"
-              : "bg-sky-400";
+              tokenPct >= 100
+                ? "bg-rose-500"
+                : tokenPct >= 70
+                  ? "bg-amber-400"
+                  : "bg-sky-400";
             const tokenTooltip = `待压缩 Token：${rawTokens.toLocaleString()} / ${leafChunkTokens.toLocaleString()}（触发阈值）。达到 100% 时下一个 turn 触发压缩。`;
 
             // freshTail 占用（当前 freshTail 内有多少条消息）
@@ -161,59 +181,100 @@ function SessionTable({
             const freshPct = Math.round((freshTailUsed / freshTailCount) * 100);
 
             return (
-            <tr key={s.session_key} className="hover:bg-slate-50">
-              <td className="py-2.5 pr-4">
-                <div className="font-medium text-slate-900">{s.agent_name ?? "—"}</div>
-                <div className="text-xs text-slate-400 truncate max-w-[160px]">{s.session_key.slice(-36)}</div>
-              </td>
-
-              {/* 压缩进度 */}
-              <td className="px-2 py-2.5 min-w-[160px]">
-                <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                    <div className={`h-full rounded-full transition-all ${pctColor}`} style={{ width: `${pct}%` }} />
+              <tr key={s.session_key} className="hover:bg-slate-50">
+                <td className="py-2.5 pr-4">
+                  <div className="font-medium text-slate-900">
+                    {s.agent_name ?? "—"}
                   </div>
-                  <span className="font-mono text-xs text-slate-600">{pct}%</span>
-                  <span className="cursor-help select-none text-xs text-slate-400 hover:text-slate-600" title={compressTooltip}>ⓘ</span>
-                </div>
-                <div className="mt-0.5 text-xs text-slate-400">
-                  {s.processed_messages.toLocaleString()} / {compressible.toLocaleString()} 可压缩
-                </div>
-              </td>
-
-              {/* 待压缩 token 水位 + freshTail 水位 */}
-              <td className="px-2 py-2.5 min-w-[180px]">
-                {/* 待压缩 token 水位 */}
-                <div className="flex items-center gap-1.5" title={tokenTooltip}>
-                  <span className="w-16 text-right font-mono text-xs text-slate-500">token</span>
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                    <div className={`h-full rounded-full transition-all ${tokenColor}`} style={{ width: `${tokenPct}%` }} />
+                  <div className="text-xs text-slate-400 truncate max-w-[160px]">
+                    {s.session_key.slice(-36)}
                   </div>
-                  <span className="font-mono text-xs text-slate-600 w-8">{tokenPct}%</span>
-                </div>
-                <div className="mt-1 flex items-center gap-1.5" title={`freshTail 缓冲区：${freshTailUsed}/${freshTailCount} 条`}>
-                  <span className="w-16 text-right font-mono text-xs text-slate-500">tail</span>
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full transition-all bg-indigo-400" style={{ width: `${freshPct}%` }} />
-                  </div>
-                  <span className="font-mono text-xs text-slate-600 w-8">{freshTailUsed}/{freshTailCount}</span>
-                </div>
-              </td>
+                </td>
 
-              <td className="px-2 py-2.5 text-right font-mono text-slate-700">{s.message_count.toLocaleString()}</td>
-              <td className="px-2 py-2.5 text-right font-mono text-slate-700">{formatNumber(s.token_count)}</td>
-              <td className="px-2 py-2.5 text-right">
-                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  {s.leaf_count}
-                </span>
-              </td>
-              <td className="px-2 py-2.5 text-right">
-                <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-                  {s.condensed_count}
-                </span>
-              </td>
-              <td className="pl-2 py-2.5 text-right text-xs text-slate-500">{formatTimestamp(s.last_updated)}</td>
-            </tr>
+                {/* 压缩进度 */}
+                <td className="px-2 py-2.5 min-w-[160px]">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all ${pctColor}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs text-slate-600">
+                      {pct}%
+                    </span>
+                    <span
+                      className="cursor-help select-none text-xs text-slate-400 hover:text-slate-600"
+                      title={compressTooltip}
+                    >
+                      ⓘ
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    {s.processed_messages.toLocaleString()} /{" "}
+                    {compressible.toLocaleString()} 可压缩
+                  </div>
+                </td>
+
+                {/* 待压缩 token 水位 + freshTail 水位 */}
+                <td className="px-2 py-2.5 min-w-[180px]">
+                  {/* 待压缩 token 水位 */}
+                  <div
+                    className="flex items-center gap-1.5"
+                    title={tokenTooltip}
+                  >
+                    <span className="w-16 text-right font-mono text-xs text-slate-500">
+                      token
+                    </span>
+                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full transition-all ${tokenColor}`}
+                        style={{ width: `${tokenPct}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs text-slate-600 w-8">
+                      {tokenPct}%
+                    </span>
+                  </div>
+                  <div
+                    className="mt-1 flex items-center gap-1.5"
+                    title={`freshTail 缓冲区：${freshTailUsed}/${freshTailCount} 条`}
+                  >
+                    <span className="w-16 text-right font-mono text-xs text-slate-500">
+                      tail
+                    </span>
+                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full transition-all bg-indigo-400"
+                        style={{ width: `${freshPct}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs text-slate-600 w-8">
+                      {freshTailUsed}/{freshTailCount}
+                    </span>
+                  </div>
+                </td>
+
+                <td className="px-2 py-2.5 text-right font-mono text-slate-700">
+                  {s.message_count.toLocaleString()}
+                </td>
+                <td className="px-2 py-2.5 text-right font-mono text-slate-700">
+                  {formatNumber(s.token_count)}
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    {s.leaf_count}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-right">
+                  <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                    {s.condensed_count}
+                  </span>
+                </td>
+                <td className="pl-2 py-2.5 text-right text-xs text-slate-500">
+                  {formatTimestamp(s.last_updated)}
+                </td>
+              </tr>
             );
           })}
         </tbody>
@@ -250,12 +311,21 @@ function DepthTable({ buckets }: { buckets: LCMDepthBucket[] }) {
         {buckets.map((b) => (
           <tr key={`${b.kind}-${b.depth}`} className="hover:bg-slate-50">
             <td className="py-2.5 pr-4">
-              <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", kindColor[b.kind] ?? "bg-slate-100 text-slate-600")}>
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                  kindColor[b.kind] ?? "bg-slate-100 text-slate-600",
+                )}
+              >
                 {b.kind}
               </span>
             </td>
-            <td className="px-2 py-2.5 text-right font-mono text-slate-700">{b.depth}</td>
-            <td className="pl-2 py-2.5 text-right font-mono text-slate-700">{b.count.toLocaleString()}</td>
+            <td className="px-2 py-2.5 text-right font-mono text-slate-700">
+              {b.depth}
+            </td>
+            <td className="pl-2 py-2.5 text-right font-mono text-slate-700">
+              {b.count.toLocaleString()}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -272,12 +342,18 @@ export default function LcmPage() {
     refetchInterval: 30_000,
   });
 
-  const { overview, sessions, depth_distribution, config } = statsQuery.data ?? {
-    overview: { conversations: 0, messages: 0, summaries_leaf: 0, summaries_condensed: 0 },
-    sessions: [],
-    depth_distribution: [],
-    config: null,
-  };
+  const { overview, sessions, depth_distribution, config } =
+    statsQuery.data ?? {
+      overview: {
+        conversations: 0,
+        messages: 0,
+        summaries_leaf: 0,
+        summaries_condensed: 0,
+      },
+      sessions: [],
+      depth_distribution: [],
+      config: null,
+    };
 
   return (
     <DashboardShell>
@@ -289,8 +365,12 @@ export default function LcmPage() {
             <div className="flex items-center gap-3">
               <Layers className="h-6 w-6 text-slate-400" />
               <div>
-                <h1 className="text-xl font-bold text-slate-900">LCM 压缩统计</h1>
-                <p className="text-sm text-slate-500">Lossless-Claw 压缩进度总览</p>
+                <h1 className="text-xl font-bold text-slate-900">
+                  LCM 压缩统计
+                </h1>
+                <p className="text-sm text-slate-500">
+                  Lossless-Claw 压缩进度总览
+                </p>
               </div>
             </div>
             {statsQuery.isFetching && (
@@ -309,7 +389,10 @@ export default function LcmPage() {
           {statsQuery.isLoading ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white shadow-sm" />
+                <div
+                  key={i}
+                  className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white shadow-sm"
+                />
               ))}
             </div>
           ) : (
@@ -318,8 +401,16 @@ export default function LcmPage() {
               <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <StatCard label="会话数" value={overview.conversations} />
                 <StatCard label="消息数" value={overview.messages} />
-                <StatCard label="Leaf 摘要" value={overview.summaries_leaf} sub="depth=0" />
-                <StatCard label="Condensed 摘要" value={overview.summaries_condensed} sub="depth≥1" />
+                <StatCard
+                  label="Leaf 摘要"
+                  value={overview.summaries_leaf}
+                  sub="depth=0"
+                />
+                <StatCard
+                  label="Condensed 摘要"
+                  value={overview.summaries_condensed}
+                  sub="depth≥1"
+                />
               </div>
 
               {/* Session progress table */}
@@ -333,7 +424,9 @@ export default function LcmPage() {
 
               {/* Depth distribution table */}
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-4 text-base font-semibold text-slate-900">Depth 分布</h2>
+                <h2 className="mb-4 text-base font-semibold text-slate-900">
+                  Depth 分布
+                </h2>
                 <DepthTable buckets={depth_distribution} />
               </section>
             </>

@@ -91,10 +91,8 @@ import {
 import {
   type listOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGetResponse,
   useListOrgCustomFieldsApiV1OrganizationsMeCustomFieldsGet,
-} from "@/api/generated/org-custom-fields/org-custom-fields";
-import {
-  getAgentStatusApiV1SessionsAgentStatusGet,
-} from "@/api/generated/sessions/sessions";
+} from "@/api/generated/custom-fields/custom-fields";
+import { getAgentStatusApiV1SessionsAgentStatusGet } from "@/api/generated/sessions/sessions";
 import type {
   AgentRead,
   ApprovalRead,
@@ -861,7 +859,9 @@ export default function BoardDetailPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatusEntry>>({});
+  const [agentStatuses, setAgentStatuses] = useState<
+    Record<string, AgentStatusEntry>
+  >({});
   const [groupSnapshot, setGroupSnapshot] = useState<BoardGroupSnapshot | null>(
     null,
   );
@@ -876,7 +876,9 @@ export default function BoardDetailPage() {
   const openedTaskIdFromUrlRef = useRef<string | null>(null);
   const openedPanelFromUrlRef = useRef<string | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<
+    string | null
+  >(null);
   const [liveFeed, setLiveFeed] = useState<LiveFeedItem[]>([]);
   const liveFeedRef = useRef<LiveFeedItem[]>([]);
   const liveFeedFlashTimersRef = useRef<Record<string, number>>({});
@@ -1986,11 +1988,13 @@ export default function BoardDetailPage() {
     if (!boardId) return;
     const fetchAgentStatuses = async () => {
       try {
-        const res = await getAgentStatusApiV1SessionsAgentStatusGet(
-          { board_id: boardId },
-        );
+        const res = await getAgentStatusApiV1SessionsAgentStatusGet({
+          board_id: boardId,
+        });
         if (res.status === 200 && res.data?.agent_statuses) {
-          setAgentStatuses(res.data.agent_statuses as Record<string, AgentStatusEntry>);
+          setAgentStatuses(
+            res.data.agent_statuses as Record<string, AgentStatusEntry>,
+          );
         }
       } catch {
         // 失败不影响主界面
@@ -2438,9 +2442,12 @@ export default function BoardDetailPage() {
         currentTaskIdFromUrl !== fullTask.id ||
         currentCommentIdFromUrl !== targetCommentId
       ) {
-        router.replace(buildUrlWithTaskAndComment(fullTask.id, targetCommentId), {
-          scroll: false,
-        });
+        router.replace(
+          buildUrlWithTaskAndComment(fullTask.id, targetCommentId),
+          {
+            scroll: false,
+          },
+        );
       }
       selectedTaskIdRef.current = fullTask.id;
       setSelectedTask(fullTask);
@@ -2954,7 +2961,8 @@ export default function BoardDetailPage() {
     }
     // 2. Try identity_profile.model
     if (agent.identity_profile && typeof agent.identity_profile === "object") {
-      const rawModel = (agent.identity_profile as Record<string, unknown>).model;
+      const rawModel = (agent.identity_profile as Record<string, unknown>)
+        .model;
       if (typeof rawModel === "string" && rawModel.trim()) {
         const parts = rawModel.trim().split("/");
         return parts[parts.length - 1];
@@ -2962,7 +2970,11 @@ export default function BoardDetailPage() {
     }
     // 3. Fall back to top-level agent.model
     const topLevelModel = (agent as unknown as Record<string, unknown>).model;
-    if (topLevelModel && typeof topLevelModel === "string" && topLevelModel.trim()) {
+    if (
+      topLevelModel &&
+      typeof topLevelModel === "string" &&
+      topLevelModel.trim()
+    ) {
       const parts = topLevelModel.trim().split("/");
       return parts[parts.length - 1];
     }
@@ -3345,17 +3357,22 @@ export default function BoardDetailPage() {
                           </div>
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             {(() => {
-                              const s = agentStatuses[agent.id]?.status ?? "offline";
-                              if (s === "working") return (
-                                <span className="relative flex-shrink-0 flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                </span>
+                              const s =
+                                agentStatuses[agent.id]?.status ?? "offline";
+                              if (s === "working")
+                                return (
+                                  <span className="relative flex-shrink-0 flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                  </span>
+                                );
+                              if (s === "idle")
+                                return (
+                                  <span className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-400" />
+                                );
+                              return (
+                                <span className="flex-shrink-0 h-2 w-2 rounded-full bg-amber-400" />
                               );
-                              if (s === "idle") return (
-                                <span className="flex-shrink-0 h-2 w-2 rounded-full bg-emerald-400" />
-                              );
-                              return <span className="flex-shrink-0 h-2 w-2 rounded-full bg-amber-400" />;
                             })()}
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-slate-900">

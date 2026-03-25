@@ -85,6 +85,6 @@ class ManagerDescriptor(Generic[ModelT]):
     """Descriptor that exposes a model-bound `ModelManager` as `.objects`."""
 
     # noinspection PyMethodMayBeStatic
-    def __get__(self, instance: object, owner: type[ModelT]) -> ModelManager[ModelT]:
+    def __get__(self, _instance: object, owner: type[ModelT]) -> ModelManager[ModelT]:
         """Return a fresh manager bound to the owning model class."""
         return ModelManager(owner)

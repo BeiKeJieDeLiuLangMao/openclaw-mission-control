@@ -63,9 +63,7 @@ async def _build_agent_map(
     except ValueError:
         return {}
 
-    result = await session.exec(
-        select(Agent).where(Agent.board_id == board_uuid)
-    )
+    result = await session.exec(select(Agent).where(Agent.board_id == board_uuid))
     agents = result.all()
     agent_map: dict[str, Agent] = {}
 

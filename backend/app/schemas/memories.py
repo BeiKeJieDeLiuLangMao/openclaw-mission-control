@@ -38,6 +38,7 @@ class MemoryItem:
     task_id: str | None
     tier: str | None = None
     tier_reason: str | None = None
+    agent_id: str | None = None
 
 
 @dataclass(frozen=True)
