@@ -199,19 +199,14 @@ function MemoryCard({
                 {String(memory.metadata!.agentId)}
               </Badge>
             )}
-            {!!memory.metadata?.source && (
-              <Badge variant="accent" className="text-xs">
-                {String(memory.metadata!.source)}
-              </Badge>
-            )}
             {memory.score !== undefined && (
               <Badge variant="outline" className="text-xs">
                 {(memory.score * 100).toFixed(0)}%
               </Badge>
             )}
-            {!!memory.metadata?.created_at && (
+            {!!memory.metadata?.createdAt && (
               <span className="text-xs text-slate-400">
-                {formatDate(String(memory.metadata!.created_at))}
+                {formatDate(String(memory.metadata!.createdAt))}
               </span>
             )}
           </div>
@@ -492,7 +487,7 @@ export default function MemoriesPage() {
                 label="当前筛选"
                 value={selectedAgent ? 1 : 0}
                 accent={selectedAgent ? "text-blue-500" : undefined}
-                sub={selectedAgent ? selectedAgent.slice(0, 8) + "…" : "全部"}
+                sub={selectedAgent ?? "全部"}
               />
             </div>
           ) : null}
