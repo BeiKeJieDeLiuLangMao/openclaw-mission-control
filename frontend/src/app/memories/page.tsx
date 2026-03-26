@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
 import { Button } from "@/components/ui/button";
+import { AILearnView } from "@/components/molecules/AILearnView";
 import { MemoryGraph } from "@/components/molecules/MemoryGraph";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,14 +18,32 @@ import { useOrganizationMembership } from "@/lib/use-organization-membership";
 import { cn } from "@/lib/utils";
 
 // mem0 server API base
-const MEM0_API = "http://localhost:8765";
+const MEM0_API = process.env.NEXT_PUBLIC_API_URL === 'auto'
+  ? `${window.location.protocol}//${window.location.hostname}:8765`
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8765');
 
 // ------ Types ------
 interface MemoryItem {
   id: string;
-  memory: string;
-  score?: number;
-  metadata: Record<string, unknown>;
+  content: string;  // Changed from 'memory' to 'content' to match OpenMemory API
+  created_at: number;
+  state: string;
+  app_name?: string;
+  categories: string[];
+  metadata__?: Record<string, unknown>;  // Qdrant payload metadata
+  score?: number;  // For search results
+  turn_id?: string | null;  // 关联的 turn ID
+  agent_id?: string;  // 顶层 agent_id 字段
+  memory_type?: string;  // 顶层 memory_type 字段
+  source?: string;  // 顶层 source 字段（从 turns 表关联获取）
+  userId?: string;  // Qdrant payload 中的 userId 字段
+  agentId?: string;  // Qdrant payload 中的 agentId 字段
+}
+
+interface SourceInfo {
+  source_id: string;  // 来源标识: claude-code, openclaw, manual
+  label: string;  // 显示标签
+  count: number;
 }
 
 interface MemoryStats {
@@ -42,13 +61,45 @@ interface AgentInfo {
 const fetchMemories = async (params: {
   userId?: string;
   agentId?: string;
+  source?: string;  // 按来源筛选
 }): Promise<MemoryItem[]> => {
   const url = new URL(`${MEM0_API}/api/v1/memories`);
   url.searchParams.set("user_id", params.userId ?? "yishu");
   if (params.agentId) url.searchParams.set("agent_id", params.agentId);
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`Failed to fetch memories: ${res.statusText}`);
-  return res.json();
+  const data = await res.json();
+  let items = data.items || data;
+
+  // 客户端来源筛选（因为 API 没有按 source 筛选的参数）
+  if (params.source) {
+    items = items.filter((m: MemoryItem) => inferSource(m) === params.source);
+  }
+
+  // 按时间倒序排序（最新的在前）
+  items.sort((a: MemoryItem, b: MemoryItem) => {
+    const timeA = new Date(a.created_at).getTime();
+    const timeB = new Date(b.created_at).getTime();
+    return timeB - timeA;  // 倒序：b - a
+  });
+
+  // 处理 Qdrant payload 结构
+  // API 返回: { content, metadata: { userId, agentId, data, ... } } (metadata 一个下划线)
+  // TypeScript 接口用: metadata__ (两个下划线)
+  return items.map((m: MemoryItem) => {
+    // API 返回的 metadata 在 m.metadata 中（一个下划线）
+    const apiMetadata = ((m as unknown) as Record<string, unknown>).metadata as Record<string, unknown> || {};
+    return {
+      ...m,
+      // content 可能在顶层或 metadata.data 中
+      content: m.content || String(apiMetadata.data || ""),
+      // 从 metadata 中提取 userId 和 agentId
+      userId: String(apiMetadata.userId || m.userId || ""),
+      agentId: String(apiMetadata.agentId || m.agentId || ""),
+      // 统一放到 metadata__ 中（两个下划线）
+      metadata__: apiMetadata,
+    };
+  });
 };
 
 const searchMemories = async (params: {
@@ -64,17 +115,80 @@ const searchMemories = async (params: {
   if (params.agentId) url.searchParams.set("agent_id", params.agentId);
   const res = await fetch(url.toString());
   if (!res.ok) throw new Error(`Failed to search memories: ${res.statusText}`);
-  return res.json();
+  const data = await res.json();
+  // Handle both array and paginated response
+  return data.items || data;
 };
+
+// 从数据中推断记忆来源（turns 表和 Qdrant 是分开存储的）
+function inferSource(m: MemoryItem): string {
+  // 1. 优先使用 API 返回的 source 字段（但 API 目前总是返回 "manual"，需要忽略）
+  // 2. 从 metadata 中提取 agentId/userId 推断来源
+  // API 返回结构: metadata = { userId: "yishu:agent:mc-xxx", agentId: "mc-xxx", ... }
+  const metadata = m.metadata__ as Record<string, unknown> | undefined;
+  const userId = String(metadata?.userId || m.userId || "");
+  const agentId = String(metadata?.agentId || m.agentId || m.agent_id || "");
+
+  // 根据 agentId 特点判断来源
+  if (agentId.startsWith("mc-")) {
+    // mc- 前缀是 Mission Control 管理的 agent，属于 OpenClaw
+    return "openclaw";
+  }
+
+  if (userId.includes("claude-code") || agentId.includes("claude-code")) {
+    return "claude-code";
+  }
+
+  if (agentId === "main" || agentId.startsWith("lead-")) {
+    // main 和 lead- 是 OpenClaw 的默认 agent
+    return "openclaw";
+  }
+
+  // 默认为手工（手动添加）
+  return "manual";
+}
+
+// Derive source list from memories
+function deriveSources(memories: MemoryItem[]): SourceInfo[] {
+  const countMap: Record<string, number> = {};
+  for (const m of memories) {
+    const src = inferSource(m);
+    countMap[src] = (countMap[src] ?? 0) + 1;
+  }
+
+  // 定义来源顺序和标签
+  const sourceLabels: Record<string, string> = {
+    "claude-code": "Claude Code",
+    "openclaw": "OpenClaw",
+    "conversation": "对话",
+    "manual": "手工",
+    "unknown": "未知",
+  };
+
+  return Object.entries(countMap)
+    .map(([source_id, count]) => ({
+      source_id,
+      label: sourceLabels[source_id] || source_id,
+      count,
+    }))
+    .sort((a, b) => {
+      // 按固定顺序排序
+      const order = ["claude-code", "openclaw", "conversation", "manual", "unknown"];
+      return order.indexOf(a.source_id) - order.indexOf(b.source_id);
+    });
+}
 
 // Derive stats from memories list (mem0 has no /stats endpoint)
 function deriveStats(memories: MemoryItem[]): MemoryStats {
   const by_source: Record<string, number> = {};
   const by_agent: Record<string, number> = {};
   for (const m of memories) {
-    const src = String(m.metadata?.source ?? "unknown");
+    // 使用 inferSource 推断来源
+    const src = inferSource(m);
     by_source[src] = (by_source[src] ?? 0) + 1;
-    const agentId = String(m.metadata?.agentId ?? "unknown");
+
+    // agent_id 优先使用顶层字段，其次 metadata
+    const agentId = m.agentId || String(m.agent_id || m.metadata__?.agentId || "unknown");
     by_agent[agentId] = (by_agent[agentId] ?? 0) + 1;
   }
   return {
@@ -88,7 +202,11 @@ function deriveStats(memories: MemoryItem[]): MemoryStats {
 function deriveAgents(memories: MemoryItem[]): AgentInfo[] {
   const countMap: Record<string, number> = {};
   for (const m of memories) {
-    const agentId = String(m.metadata?.agentId ?? "unknown");
+    // 从 metadata 中提取 agentId（API 返回的结构）
+    const metadata = m.metadata__ as Record<string, unknown> | undefined;
+    const agentId = String(
+      metadata?.agentId || m.agentId || m.agent_id || "unknown"
+    );
     countMap[agentId] = (countMap[agentId] ?? 0) + 1;
   }
   return Object.entries(countMap).map(([agent_id, count]) => ({ agent_id, count }));
@@ -165,6 +283,24 @@ function StatCard({
   );
 }
 
+// 来源标签映射
+const SOURCE_LABELS: Record<string, string> = {
+  "claude-code": "Claude Code",
+  "openclaw": "OpenClaw",
+  "conversation": "对话",
+  "manual": "手工",
+  "unknown": "未知",
+};
+
+// 来源对应的颜色
+const SOURCE_COLORS: Record<string, string> = {
+  "claude-code": "bg-purple-100 text-purple-700 border-purple-200",
+  "openclaw": "bg-blue-100 text-blue-700 border-blue-200",
+  "conversation": "bg-green-100 text-green-700 border-green-200",
+  "manual": "bg-slate-100 text-slate-700 border-slate-200",
+  "unknown": "bg-gray-100 text-gray-700 border-gray-200",
+};
+
 // ------ Memory Card ------
 function MemoryCard({
   memory,
@@ -174,6 +310,9 @@ function MemoryCard({
   onDelete: (id: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const source = inferSource(memory);
+  const sourceLabel = SOURCE_LABELS[source] || source;
+  const sourceColor = SOURCE_COLORS[source] || SOURCE_COLORS["unknown"];
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -190,25 +329,33 @@ function MemoryCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm leading-relaxed text-slate-700">
-            {truncate(memory.memory, 300)}
+            {truncate(memory.content, 300)}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!!memory.metadata?.agentId && (
-              <Badge variant="outline" className="gap-1 text-xs">
-                <Bot className="h-3 w-3" />
-                {String(memory.metadata!.agentId)}
-              </Badge>
-            )}
-            {memory.score !== undefined && (
+            {/* 来源 Badge */}
+            <span className={cn("rounded-full border px-2 py-0.5 text-xs font-medium", sourceColor)}>
+              {sourceLabel}
+            </span>
+            {/* Agent Badge */}
+            {(() => {
+              const metadata = memory.metadata__ as Record<string, unknown> | undefined;
+              const agentId = memory.agentId || memory.agent_id || String(metadata?.agentId || "");
+              return agentId ? (
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <Bot className="h-3 w-3" />
+                  {agentId}
+                </Badge>
+              ) : null;
+            })()}
+            {/* 搜索得分 */}
+            {memory.score != null && memory.score !== undefined && (
               <Badge variant="outline" className="text-xs">
                 {(memory.score * 100).toFixed(0)}%
               </Badge>
             )}
-            {!!memory.metadata?.createdAt && (
-              <span className="text-xs text-slate-400">
-                {formatDate(String(memory.metadata!.createdAt))}
-              </span>
-            )}
+            <span className="text-xs text-slate-400">
+              {formatDate(memory.created_at)}
+            </span>
           </div>
         </div>
         <Button
@@ -221,6 +368,51 @@ function MemoryCard({
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ------ Source Filter ------
+function SourceFilter({
+  sources,
+  selected,
+  onSelect,
+}: {
+  sources: SourceInfo[];
+  selected?: string;
+  onSelect: (source?: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs text-slate-500">来源:</span>
+      <button
+        onClick={() => onSelect(undefined)}
+        className={cn(
+          "rounded-full px-3 py-1 text-xs font-medium transition",
+          !selected
+            ? "bg-blue-500 text-white"
+            : "bg-slate-100 text-slate-600 hover:bg-slate-200",
+        )}
+      >
+        全部
+      </button>
+      {sources.map((src) => {
+        const colorClass = SOURCE_COLORS[src.source_id] || SOURCE_COLORS["unknown"];
+        return (
+          <button
+            key={src.source_id}
+            onClick={() => onSelect(src.source_id)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition",
+              selected === src.source_id
+                ? "bg-blue-500 text-white"
+                : colorClass,
+            )}
+          >
+            {src.label} ({src.count})
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -278,7 +470,9 @@ export default function MemoriesPage() {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [stats, setStats] = useState<MemoryStats | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [sources, setSources] = useState<SourceInfo[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string | undefined>();
+  const [selectedSource, setSelectedSource] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -286,7 +480,7 @@ export default function MemoriesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [addingMemory, setAddingMemory] = useState(false);
-  const [view, setView] = useState<"list" | "graph">("list");
+  const [view, setView] = useState<"list" | "graph" | "ailearn">("list");
 
   const userId = "yishu";
 
@@ -295,36 +489,37 @@ export default function MemoriesPage() {
     setError(null);
     try {
       // mem0 has no /stats or /agents endpoints; derive from memories list
-      const data = await fetchMemories({ userId, agentId: selectedAgent });
+      const data = await fetchMemories({ userId, agentId: selectedAgent, source: selectedSource });
       setMemories(data);
       setStats(deriveStats(data));
       setAgents(deriveAgents(data));
+      setSources(deriveSources(data));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load data");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedAgent]);
+  }, [userId, selectedAgent, selectedSource]);
 
   const loadMemories = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await fetchMemories({ userId, agentId: selectedAgent });
+      const data = await fetchMemories({ userId, agentId: selectedAgent, source: selectedSource });
       setMemories(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load memories");
     } finally {
       setIsLoading(false);
     }
-  }, [userId, selectedAgent]);
+  }, [userId, selectedAgent, selectedSource]);
 
-  // Initial load
+  // Initial load and re-load when filters change
   useEffect(() => {
     loadData();
     loadMemories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, selectedAgent]);
+  }, [userId, selectedAgent, selectedSource]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -401,10 +596,11 @@ export default function MemoriesPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Tabs value={view} onValueChange={(v) => setView(v as "list" | "graph")}>
+              <Tabs value={view} onValueChange={(v) => setView(v as "list" | "graph" | "ailearn")}>
                 <TabsList className="h-8">
                   <TabsTrigger value="list" className="text-xs">列表</TabsTrigger>
                   <TabsTrigger value="graph" className="text-xs">图谱</TabsTrigger>
+                  <TabsTrigger value="ailearn" className="text-xs">AI 学习</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button
@@ -426,6 +622,9 @@ export default function MemoriesPage() {
           {view === "graph" && (
             <MemoryGraph userId={userId} />
           )}
+
+          {/* AI Learning View */}
+          {view === "ailearn" && <AILearnView />}
 
           {/* Error */}
           {error && (
@@ -492,22 +691,24 @@ export default function MemoriesPage() {
             </div>
           ) : null}
 
+          {/* Source Filter */}
+          {sources.length > 0 && view === "list" && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <SourceFilter
+                sources={sources}
+                selected={selectedSource}
+                onSelect={(source) => setSelectedSource(source)}
+              />
+            </div>
+          )}
+
           {/* Agent Filter */}
           {agents.length > 0 && view === "list" && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <AgentFilter
                 agents={agents}
                 selected={selectedAgent}
-                onSelect={(agentId) => {
-                  setSelectedAgent(agentId);
-                  setTimeout(async () => {
-                    try {
-                      const data = await fetchMemories({ userId, agentId });
-                      setMemories(data);
-                      setStats(deriveStats(data));
-                    } catch { /* loadData will handle error */ }
-                  }, 0);
-                }}
+                onSelect={(agentId) => setSelectedAgent(agentId)}
               />
             </div>
           )}
