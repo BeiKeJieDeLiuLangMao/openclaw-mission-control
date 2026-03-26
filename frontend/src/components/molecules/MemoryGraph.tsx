@@ -49,6 +49,10 @@ interface GraphData {
   links: LinkObject[];
 }
 
+interface GraphAgentsResponse {
+  agents: Array<{ agent_id: string; label: string; node_count: number }>;
+}
+
 // ------ API ------
 const MEM0_API = process.env.NEXT_PUBLIC_MEM0_API ?? "http://localhost:8765";
 
@@ -61,6 +65,12 @@ const fetchGraph = async (userId: string): Promise<GraphResponse> => {
 const fetchGraphStats = async (userId: string): Promise<GraphStats> => {
   const res = await fetch(`${MEM0_API}/api/v1/graph/stats?user_id=${encodeURIComponent(userId)}`);
   if (!res.ok) throw new Error(`Graph stats API failed: ${res.statusText}`);
+  return res.json();
+};
+
+const fetchGraphAgents = async (userId: string): Promise<GraphAgentsResponse> => {
+  const res = await fetch(`${MEM0_API}/api/v1/graph/agents?user_id=${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error(`Graph agents API failed: ${res.statusText}`);
   return res.json();
 };
 
@@ -121,12 +131,20 @@ export function MemoryGraph({ userId, className }: MemoryGraphProps) {
   const [error, setError] = useState<string | null>(null);
   const [hoveredRel, setHoveredRel] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<string>("");
+  const [agentList, setAgentList] = useState<Array<{ agent_id: string; label: string; node_count: number }>>([]);
+
+  // Derive the actual user_id to query (full prefix or plain userId)
+  const queryUserId = selectedAgent || userId;
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [graphRes, statsRes] = await Promise.all([fetchGraph(userId), fetchGraphStats(userId)]);
+      const [graphRes, statsRes] = await Promise.all([
+        fetchGraph(queryUserId),
+        fetchGraphStats(queryUserId),
+      ]);
       setGraphData(buildGraphData(graphRes.relations));
       setStats(statsRes);
     } catch (e) {
@@ -134,6 +152,13 @@ export function MemoryGraph({ userId, className }: MemoryGraphProps) {
     } finally {
       setLoading(false);
     }
+  }, [queryUserId]);
+
+  // Load agent list on mount
+  useEffect(() => {
+    fetchGraphAgents(userId)
+      .then((res) => setAgentList(res.agents))
+      .catch(() => {/* non-critical */});
   }, [userId]);
 
   useEffect(() => {
@@ -204,6 +229,21 @@ export function MemoryGraph({ userId, className }: MemoryGraphProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Agent isolation selector */}
+          {agentList.length > 0 && (
+            <select
+              value={selectedAgent}
+              onChange={(e) => setSelectedAgent(e.target.value)}
+              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            >
+              <option value="">全部</option>
+              {agentList.map((a) => (
+                <option key={a.agent_id} value={a.agent_id}>
+                  {a.label} ({a.node_count})
+                </option>
+              ))}
+            </select>
+          )}
           {/* Relationship type filter chips */}
           {stats && stats.relation_types.length > 0 && (
             <div className="hidden max-w-xs flex-wrap items-center gap-1 md:flex">
