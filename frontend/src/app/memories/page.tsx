@@ -74,7 +74,7 @@ function deriveStats(memories: MemoryItem[]): MemoryStats {
   for (const m of memories) {
     const src = String(m.metadata?.source ?? "unknown");
     by_source[src] = (by_source[src] ?? 0) + 1;
-    const agentId = String(m.metadata?.agent_id ?? "unknown");
+    const agentId = String(m.metadata?.agentId ?? "unknown");
     by_agent[agentId] = (by_agent[agentId] ?? 0) + 1;
   }
   return {
@@ -88,7 +88,7 @@ function deriveStats(memories: MemoryItem[]): MemoryStats {
 function deriveAgents(memories: MemoryItem[]): AgentInfo[] {
   const countMap: Record<string, number> = {};
   for (const m of memories) {
-    const agentId = String(m.metadata?.agent_id ?? "unknown");
+    const agentId = String(m.metadata?.agentId ?? "unknown");
     countMap[agentId] = (countMap[agentId] ?? 0) + 1;
   }
   return Object.entries(countMap).map(([agent_id, count]) => ({ agent_id, count }));
@@ -193,10 +193,10 @@ function MemoryCard({
             {truncate(memory.memory, 300)}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!!memory.metadata?.agent_id && (
+            {!!memory.metadata?.agentId && (
               <Badge variant="outline" className="gap-1 text-xs">
                 <Bot className="h-3 w-3" />
-                {String(memory.metadata!.agent_id).slice(0, 8)}…
+                {String(memory.metadata!.agentId)}
               </Badge>
             )}
             {!!memory.metadata?.source && (
@@ -267,7 +267,7 @@ function AgentFilter({
         >
           <span className="flex items-center gap-1">
             <Bot className="h-3 w-3" />
-            {agent.agent_id.slice(0, 6)}… ({agent.count})
+            {agent.agent_id} ({agent.count})
           </span>
         </button>
       ))}
