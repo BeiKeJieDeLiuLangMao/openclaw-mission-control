@@ -4,10 +4,12 @@ export const dynamic = "force-dynamic";
 
 import { useState, useCallback, useEffect } from "react";
 import { Brain, Search, Plus, Trash2, RefreshCw, Bot, Filter } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { DashboardShell } from "@/components/templates/DashboardShell";
 import { DashboardSidebar } from "@/components/organisms/DashboardSidebar";
 import { Button } from "@/components/ui/button";
+import { MemoryGraph } from "@/components/molecules/MemoryGraph";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/auth/clerk";
@@ -289,6 +291,7 @@ export default function MemoriesPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMemoryText, setNewMemoryText] = useState("");
   const [addingMemory, setAddingMemory] = useState(false);
+  const [view, setView] = useState<"list" | "graph">("list");
 
   const userId = "yishu";
 
@@ -403,6 +406,12 @@ export default function MemoriesPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Tabs value={view} onValueChange={(v) => setView(v as "list" | "graph")}>
+                <TabsList className="h-8">
+                  <TabsTrigger value="list" className="text-xs">列表</TabsTrigger>
+                  <TabsTrigger value="graph" className="text-xs">图谱</TabsTrigger>
+                </TabsList>
+              </Tabs>
               <Button
                 variant="outline"
                 size="sm"
@@ -417,6 +426,11 @@ export default function MemoriesPage() {
               </Button>
             </div>
           </div>
+
+          {/* Graph View */}
+          {view === "graph" && (
+            <MemoryGraph userId={userId} />
+          )}
 
           {/* Error */}
           {error && (
@@ -462,7 +476,7 @@ export default function MemoriesPage() {
                 />
               ))}
             </div>
-          ) : stats ? (
+          ) : stats && view === "list" ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <StatCard label="总记忆数" value={stats.total} />
               <StatCard
@@ -484,7 +498,7 @@ export default function MemoriesPage() {
           ) : null}
 
           {/* Agent Filter */}
-          {agents.length > 0 && (
+          {agents.length > 0 && view === "list" && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <AgentFilter
                 agents={agents}
@@ -504,6 +518,7 @@ export default function MemoriesPage() {
           )}
 
           {/* Search */}
+          {view === "list" && (
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -526,8 +541,10 @@ export default function MemoriesPage() {
               )}
             </div>
           </div>
+          )}
 
           {/* Memory List */}
+          {view === "list" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-700">
@@ -560,6 +577,7 @@ export default function MemoriesPage() {
               </div>
             )}
           </div>
+          )}
         </div>
       </main>
     </DashboardShell>
