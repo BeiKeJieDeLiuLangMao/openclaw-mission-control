@@ -30,6 +30,9 @@ from app.models.task_fingerprints import TaskFingerprint
 from app.models.tasks import Task
 from app.models.users import User
 
+# Memory models
+from app.memory.models import Turn, VectorMemory
+
 __all__ = [
     "ActivityEvent",
     "Agent",
@@ -60,4 +63,6 @@ __all__ = [
     "Tag",
     "TagAssignment",
     "User",
+    "Turn",
+    "VectorMemory",
 ]

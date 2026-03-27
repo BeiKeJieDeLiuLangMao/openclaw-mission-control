@@ -26,6 +26,8 @@ from app.api.crons import router as crons_router
 from app.api.gateway import router as gateway_router
 from app.api.gateways import router as gateways_router
 from app.api.memories import router as memories_router
+from app.api.memory_turns import router as memory_turns_router
+from app.api.memory_memories import router as memory_memories_router
 from app.api.metrics import router as metrics_router
 from app.api.organizations import router as organizations_router
 from app.api.sessions import router as sessions_router
@@ -43,6 +45,7 @@ from app.core.rate_limit_backend import RateLimitBackend
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.session import init_db
 from app.schemas.health import HealthStatusResponse
+from app.memory.services.memory_worker import start_worker_in_background
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -464,6 +467,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("app.lifecycle.rate_limit backend=redis")
     else:
         logger.info("app.lifecycle.rate_limit backend=memory")
+
+    # Start memory worker in background
+    start_worker_in_background()
+    logger.info("app.lifecycle.memory_worker started")
+
     logger.info("app.lifecycle.started")
     try:
         yield
@@ -583,6 +591,10 @@ api_v1.include_router(memories_router)
 api_v1.include_router(crons_router)
 api_v1.include_router(sessions_router)
 app.include_router(api_v1)
+
+# Memory service routers
+app.include_router(memory_turns_router)
+app.include_router(memory_memories_router)
 
 add_pagination(app)
 logger.debug("app.routes.registered count=%s", len(app.routes))

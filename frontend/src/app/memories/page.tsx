@@ -120,11 +120,20 @@ const searchMemories = async (params: {
   return data.items || data;
 };
 
-// 从数据中推断记忆来源（turns 表和 Qdrant 是分开存储的）
+// 从数据中推断记忆来源（优先使用 API 返回的 source 字段）
 function inferSource(m: MemoryItem): string {
-  // 1. 优先使用 API 返回的 source 字段（但 API 目前总是返回 "manual"，需要忽略）
-  // 2. 从 metadata 中提取 agentId/userId 推断来源
-  // API 返回结构: metadata = { userId: "yishu:agent:mc-xxx", agentId: "mc-xxx", ... }
+  // 1. 优先使用 API 返回的 source 字段（现在已正确实现）
+  if (m.source && m.source !== "manual") {
+    return m.source;
+  }
+
+  // 2. 如果 API 返回 "manual"，检查是否有 agent_id 判断真实来源
+  if (m.source === "manual" && m.agent_id && m.agent_id !== "unknown") {
+    // 如果有 agent_id 但 source 是 manual，可能是新添加的记忆
+    return "manual";
+  }
+
+  // 3. 从 metadata 中提取 agentId/userId 推断来源（兼容旧数据）
   const metadata = m.metadata__ as Record<string, unknown> | undefined;
   const userId = String(metadata?.userId || m.userId || "");
   const agentId = String(metadata?.agentId || m.agentId || m.agent_id || "");
@@ -517,7 +526,6 @@ export default function MemoriesPage() {
   // Initial load and re-load when filters change
   useEffect(() => {
     loadData();
-    loadMemories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, selectedAgent, selectedSource]);
 

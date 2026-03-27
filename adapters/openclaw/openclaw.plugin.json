@@ -1,0 +1,93 @@
+{
+  "id": "openclaw-mem0",
+  "kind": "memory",
+  "uiHints": {
+    "apiUrl": {
+      "label": "OpenMemory API URL",
+      "placeholder": "http://localhost:8765",
+      "help": "Base URL of the OpenMemory Python API service"
+    },
+    "userId": {
+      "label": "Default User ID",
+      "placeholder": "default",
+      "help": "User ID for scoping memories"
+    },
+    "autoCapture": {
+      "label": "Auto-Capture",
+      "help": "Automatically store conversation context after each agent turn"
+    },
+    "autoRecall": {
+      "label": "Auto-Recall",
+      "help": "Automatically inject relevant memories before each agent turn"
+    },
+    "customInstructions": {
+      "label": "Custom Instructions",
+      "placeholder": "Only store user preferences and important facts...",
+      "help": "Natural language rules for what to store or exclude during fact extraction"
+    },
+    "customCategories": {
+      "label": "Custom Categories",
+      "advanced": true,
+      "help": "Map of category names to descriptions for memory tagging. Sensible defaults are built in."
+    },
+    "customPrompt": {
+      "label": "Custom Prompt",
+      "advanced": true,
+      "help": "Custom prompt for memory extraction."
+    },
+    "enableGraph": {
+      "label": "Enable Graph Memory",
+      "help": "Enable knowledge graph for entity relationships (handled by OpenMemory API)"
+    },
+    "searchThreshold": {
+      "label": "Search Threshold",
+      "placeholder": "0.5",
+      "help": "Minimum similarity score for search results (0-1). Default: 0.5"
+    },
+    "topK": {
+      "label": "Top K Results",
+      "placeholder": "5",
+      "help": "Maximum number of memories to retrieve"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiUrl": {
+        "type": "string"
+      },
+      "userId": {
+        "type": "string"
+      },
+      "autoCapture": {
+        "type": "boolean"
+      },
+      "autoRecall": {
+        "type": "boolean"
+      },
+      "customInstructions": {
+        "type": "string"
+      },
+      "customCategories": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "customPrompt": {
+        "type": "string"
+      },
+      "enableGraph": {
+        "type": "boolean"
+      },
+      "searchThreshold": {
+        "type": "number"
+      },
+      "topK": {
+        "type": "number"
+      }
+    },
+    "required": []
+  }
+}
