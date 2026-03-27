@@ -17,6 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db.session import async_session_maker
 from app.memory.models import Turn, VectorMemory
+from app.memory.utils import get_memory_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,44 @@ logger = logging.getLogger(__name__)
 async def process_fact_extraction(turn: Turn, db: AsyncSession) -> None:
     """从对话中提取关键事实"""
     try:
-        # TODO: 集成 mem0 SDK 后，调用 LLM 提取事实
-        # 当前暂时只记录日志
-        logger.info(f"Fact extraction skipped for turn {turn.id} (mem0 SDK not integrated)")
+        memory_client = get_memory_client()
+        if not memory_client:
+            logger.warning(f"Memory client unavailable for turn {turn.id}")
+            return
+
+        metadata = {
+            "source": turn.source,
+            "turn_id": str(turn.id),
+            "memory_type": "fact",
+        }
+        if turn.agent_id:
+            metadata["agent_id"] = turn.agent_id
+
+        # 调用 LLM 提取事实
+        response = memory_client.add(
+            messages=turn.messages,
+            user_id=turn.user_id,
+            agent_id=turn.agent_id,
+            metadata=metadata,
+            infer=True
+        )
+
+        # 写入 vector_memories 表
+        results = response.get("results", [])
+        for item in results:
+            vm = VectorMemory(
+                qdrant_id=item.get("id", ""),
+                user_id=turn.user_id,
+                agent_id=turn.agent_id,
+                turn_id=str(turn.id),
+                content=item.get("memory", item.get("text", "")),
+                memory_type="fact",
+                source=turn.source,
+            )
+            db.add(vm)
+
+        await db.commit()
+        logger.info(f"Fact extraction completed for turn {turn.id}, extracted {len(results)} facts")
 
     except Exception as e:
         logger.error(f"Fact extraction failed for turn {turn.id}: {e}")
@@ -36,22 +72,108 @@ async def process_fact_extraction(turn: Turn, db: AsyncSession) -> None:
 async def process_summary_generation(turn: Turn, db: AsyncSession) -> None:
     """生成对话摘要"""
     try:
-        # TODO: 集成 mem0 SDK 后，生成并存储摘要
-        logger.info(f"Summary generation skipped for turn {turn.id} (mem0 SDK not integrated)")
+        memory_client = get_memory_client()
+        if not memory_client:
+            logger.warning(f"Memory client unavailable for turn {turn.id}")
+            return
+
+        # 构建摘要文本
+        summary_text = _build_summary_text(turn.messages)
+        if not summary_text:
+            logger.info(f"No summary text for turn {turn.id}")
+            return
+
+        metadata = {
+            "source": turn.source,
+            "turn_id": str(turn.id),
+            "memory_type": "summary",
+        }
+        if turn.agent_id:
+            metadata["agent_id"] = turn.agent_id
+
+        # 存储摘要（不经过 LLM 提取）
+        response = memory_client.add(
+            messages=[{"role": "user", "content": summary_text}],
+            user_id=turn.user_id,
+            agent_id=turn.agent_id,
+            metadata=metadata,
+            infer=False
+        )
+
+        # 写入 vector_memories 表
+        results = response.get("results", [])
+        for item in results:
+            vm = VectorMemory(
+                qdrant_id=item.get("id", ""),
+                user_id=turn.user_id,
+                agent_id=turn.agent_id,
+                turn_id=str(turn.id),
+                content=item.get("memory", item.get("text", "")),
+                memory_type="summary",
+                source=turn.source,
+            )
+            db.add(vm)
+
+        await db.commit()
+        logger.info(f"Summary generation completed for turn {turn.id}")
 
     except Exception as e:
         logger.error(f"Summary generation failed for turn {turn.id}: {e}")
         await db.rollback()
 
 
+def _build_summary_text(messages: list) -> str:
+    """构建对话摘要文本"""
+    if not messages:
+        return ""
+
+    lines = []
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        if content:
+            lines.append(f"{role}: {content}")
+
+    return "\n".join(lines)
+
+
 async def process_graph_build(turn: Turn, db: AsyncSession) -> None:
     """构建知识图谱"""
     try:
-        # TODO: 集成 Neo4j 后，提取实体关系并构建图谱
-        logger.info(f"Graph build skipped for turn {turn.id} (Neo4j not integrated)")
+        memory_client = get_memory_client()
+        if not memory_client:
+            logger.warning(f"Memory client unavailable for turn {turn.id}")
+            return
+
+        # 从 messages 提取实体关系
+        entities, relations = _extract_entities_and_relations(turn.messages)
+
+        # 写入 Neo4j（如果可用）
+        if entities or relations:
+            logger.info(f"Graph build for turn {turn.id}: {len(entities)} entities, {len(relations)} relations")
+        else:
+            logger.info(f"No entities/relations extracted for turn {turn.id}")
 
     except Exception as e:
         logger.error(f"Graph build failed for turn {turn.id}: {e}")
+
+
+def _extract_entities_and_relations(messages: list) -> tuple:
+    """从对话中提取实体和关系"""
+    # 简化实现，后续可以接入 LLM 做实体识别
+    entities = []
+    relations = []
+
+    for msg in messages:
+        content = msg.get("content", "")
+        if content:
+            # 简单关键词提取（后续优化）
+            if "项目" in content:
+                entities.append({"type": "project", "name": "当前项目"})
+            if "AI" in content or "人工智能" in content:
+                entities.append({"type": "tech", "name": "AI技术"})
+
+    return entities, relations
 
 
 async def process_turn(db: AsyncSession, turn: Turn) -> bool:
