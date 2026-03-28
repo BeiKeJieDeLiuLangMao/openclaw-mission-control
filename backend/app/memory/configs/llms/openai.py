@@ -1,6 +1,6 @@
 from typing import Any, Callable, List, Optional
 
-from mem0.configs.llms.base import BaseLlmConfig
+from app.memory.configs.llms.base import BaseLlmConfig
 
 
 class OpenAIConfig(BaseLlmConfig):

@@ -5,10 +5,10 @@ from typing import Dict, List, Optional, Union
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
-from mem0.configs.llms.azure import AzureOpenAIConfig
-from mem0.configs.llms.base import BaseLlmConfig
-from mem0.llms.base import LLMBase
-from mem0.memory.utils import extract_json
+from app.memory.configs.llms.azure import AzureOpenAIConfig
+from app.memory.configs.llms.base import BaseLlmConfig
+from app.memory.llms.base import LLMBase
+from app.memory.memory.utils import extract_json
 
 SCOPE = "https://cognitiveservices.azure.com/.default"
 

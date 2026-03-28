@@ -5,7 +5,7 @@ Memory models for Turn and VectorMemory storage.
 from __future__ import annotations
 
 from datetime import datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlmodel import Field, JSON, SQLModel
 
@@ -17,12 +17,17 @@ def get_current_utc_time() -> datetime:
     return datetime.now()
 
 
+def generate_uuid_str() -> str:
+    """Generate UUID as string"""
+    return str(uuid4())
+
+
 class Turn(QueryModel, table=True):
     """存储原始对话 turn（用户-模型的完整交互）"""
 
     __tablename__ = "turns"  # pyright: ignore[reportAssignmentType]
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
     session_id: str = Field(nullable=False, index=True)
     user_id: str = Field(nullable=False, index=True)
     agent_id: str = Field(nullable=False, index=True)  # 必填
@@ -33,11 +38,11 @@ class Turn(QueryModel, table=True):
 
 
 class VectorMemory(QueryModel, table=True):
-    """冗余表：统一存储 fact 和 summary 类型的记忆（来自 Qdrant）"""
+    """冗余表：统一存储 fact 和 summary 类型���记忆（来自 Qdrant）"""
 
     __tablename__ = "vector_memories"  # pyright: ignore[reportAssignmentType]
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    id: str = Field(default_factory=generate_uuid_str, primary_key=True)
     qdrant_id: str = Field(nullable=False, unique=True, index=True)  # Qdrant point ID
     user_id: str = Field(nullable=False, index=True)
     agent_id: str | None = Field(default=None, index=True)

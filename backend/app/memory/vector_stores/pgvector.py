@@ -25,7 +25,7 @@ except ImportError:
             "Please install one of them using 'pip install psycopg[pool]' or 'pip install psycopg2'"
         )
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

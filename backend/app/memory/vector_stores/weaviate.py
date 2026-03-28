@@ -17,7 +17,7 @@ from weaviate.classes.init import AdditionalConfig, Auth, Timeout
 from weaviate.classes.query import Filter, MetadataQuery
 from weaviate.util import get_valid_uuid
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

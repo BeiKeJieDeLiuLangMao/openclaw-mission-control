@@ -12,7 +12,7 @@ try:
 except ImportError:
     raise ImportError("The 'pymongo' library is required. Please install it using 'pip install pymongo'.")
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)

@@ -26,7 +26,7 @@ except ImportError:
         "or `pip install faiss-cpu` (depending on Python version)."
     )
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

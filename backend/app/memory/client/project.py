@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from mem0.client.utils import api_error_handler
-from mem0.memory.telemetry import capture_client_event
+from app.memory.client.utils import api_error_handler
+from app.memory.memory.telemetry import capture_client_event
 # Exception classes are referenced in docstrings only
 
 logger = logging.getLogger(__name__)

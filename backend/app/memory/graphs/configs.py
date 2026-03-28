@@ -2,7 +2,7 @@ from typing import Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from mem0.llms.configs import LlmConfig
+from app.memory.llms.configs import LlmConfig
 
 
 class Neo4jConfig(BaseModel):

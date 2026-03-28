@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional
 
-from mem0.configs.llms.base import BaseLlmConfig
-from mem0.llms.base import LLMBase
+from app.memory.configs.llms.base import BaseLlmConfig
+from app.memory.llms.base import LLMBase
 
 try:
     from langchain.chat_models.base import BaseChatModel

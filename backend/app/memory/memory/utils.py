@@ -2,7 +2,7 @@ import hashlib
 import logging
 import re
 
-from mem0.configs.prompts import (
+from app.memory.configs.prompts import (
     AGENT_MEMORY_EXTRACTION_PROMPT,
     FACT_RETRIEVAL_PROMPT,
     USER_MEMORY_EXTRACTION_PROMPT,

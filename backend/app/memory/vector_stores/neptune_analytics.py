@@ -10,7 +10,7 @@ try:
 except ImportError:
     raise ImportError("langchain_aws is not installed. Please install it using pip install langchain_aws")
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

@@ -214,8 +214,8 @@ async def run_worker_cycle():
             statement = select(Turn).where(
                 Turn.processing_status == "pending"
             ).order_by(Turn.created_at.asc()).limit(1)
-            result = await db.exec(statement)
-            turn = result.first()
+            result = await db.execute(statement)
+            turn = result.scalar_one_or_none()
 
             if turn:
                 logger.info(f"Processing turn {turn.id}")
@@ -224,7 +224,7 @@ async def run_worker_cycle():
                 logger.debug("No pending turns found")
 
         except Exception as e:
-            logger.error(f"Worker cycle failed: {e}")
+            logger.error(f"Worker cycle failed: {e}", exc_info=True)
 
 
 async def start_worker():

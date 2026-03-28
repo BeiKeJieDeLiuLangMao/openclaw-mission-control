@@ -13,18 +13,18 @@ from typing import Any, Dict, Optional
 
 from pydantic import ValidationError
 
-from mem0.configs.base import MemoryConfig, MemoryItem
-from mem0.configs.enums import MemoryType
-from mem0.configs.prompts import (
+from app.memory.configs.base import MemoryConfig, MemoryItem
+from app.memory.configs.enums import MemoryType
+from app.memory.configs.prompts import (
     PROCEDURAL_MEMORY_SYSTEM_PROMPT,
     get_update_memory_messages,
 )
-from mem0.exceptions import ValidationError as Mem0ValidationError
-from mem0.memory.base import MemoryBase
-from mem0.memory.setup import mem0_dir, setup_config
-from mem0.memory.storage import SQLiteManager
-from mem0.memory.telemetry import MEM0_TELEMETRY, capture_event
-from mem0.memory.utils import (
+from app.memory.exceptions import ValidationError as Mem0ValidationError
+from app.memory.memory.base import MemoryBase
+from app.memory.memory.setup import mem0_dir, setup_config
+from app.memory.memory.storage import SQLiteManager
+from app.memory.memory.telemetry import MEM0_TELEMETRY, capture_event
+from app.memory.memory.utils import (
     ensure_json_instruction,
     extract_json,
     get_fact_retrieval_messages,
@@ -34,7 +34,7 @@ from mem0.memory.utils import (
     process_telemetry_filters,
     remove_code_blocks,
 )
-from mem0.utils.factory import (
+from app.memory.utils.factory import (
     EmbedderFactory,
     GraphStoreFactory,
     LlmFactory,

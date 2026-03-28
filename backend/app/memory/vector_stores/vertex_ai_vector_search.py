@@ -14,10 +14,10 @@ try:
 except ImportError:  # pragma: no cover - fallback for older LangChain versions
     from langchain.schema import Document  # type: ignore[no-redef]
 
-from mem0.configs.vector_stores.vertex_ai_vector_search import (
+from app.memory.configs.vector_stores.vertex_ai_vector_search import (
     GoogleMatchingEngineConfig,
 )
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)

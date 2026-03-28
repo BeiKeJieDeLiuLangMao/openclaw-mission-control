@@ -3,10 +3,15 @@ import os
 import platform
 import sys
 
-from posthog import Posthog
+# Temporarily disable PostHog telemetry
+try:
+    from posthog import Posthog
+    POSTHOG_AVAILABLE = True
+except ImportError:
+    POSTHOG_AVAILABLE = False
+    Posthog = None
 
-import mem0
-from mem0.memory.setup import get_or_create_user_id
+from app.memory.memory.setup import get_or_create_user_id
 
 MEM0_TELEMETRY = os.environ.get("MEM0_TELEMETRY", "True")
 PROJECT_API_KEY = "phc_hgJkUVJFYtmaJqrvf6CYN67TIQ8yhXAkWzUn9AMU4yX"
@@ -29,8 +34,12 @@ class AnonymousTelemetry:
             self.user_id = None
             return
 
-        self.posthog = Posthog(project_api_key=PROJECT_API_KEY, host=HOST)
-        self.user_id = get_or_create_user_id(vector_store)
+        if POSTHOG_AVAILABLE:
+            self.posthog = Posthog(project_api_key=PROJECT_API_KEY, host=HOST)
+            self.user_id = get_or_create_user_id(vector_store)
+        else:
+            self.posthog = None
+            self.user_id = None
 
     def capture_event(self, event_name, properties=None, user_email=None):
         if self.posthog is None:
@@ -40,7 +49,6 @@ class AnonymousTelemetry:
             properties = {}
         properties = {
             "client_source": "python",
-            "client_version": mem0.__version__,
             "python_version": sys.version,
             "os": sys.platform,
             "os_version": platform.version(),

@@ -2,7 +2,7 @@ import json
 import logging
 import httpx
 
-from mem0.exceptions import (
+from app.memory.exceptions import (
     NetworkError,
     create_exception_from_response,
 )
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class APIError(Exception):
     """Exception raised for errors in the API.
     
-    Deprecated: Use specific exception classes from mem0.exceptions instead.
+    Deprecated: Use specific exception classes from app.memory.exceptions instead.
     This class is maintained for backward compatibility.
     """
 

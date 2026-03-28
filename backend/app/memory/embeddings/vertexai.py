@@ -3,9 +3,9 @@ from typing import Literal, Optional
 
 from vertexai.language_models import TextEmbeddingInput, TextEmbeddingModel
 
-from mem0.configs.embeddings.base import BaseEmbedderConfig
-from mem0.embeddings.base import EmbeddingBase
-from mem0.utils.gcp_auth import GCPAuthenticator
+from app.memory.configs.embeddings.base import BaseEmbedderConfig
+from app.memory.embeddings.base import EmbeddingBase
+from app.memory.utils.gcp_auth import GCPAuthenticator
 
 
 class VertexAIEmbedding(EmbeddingBase):

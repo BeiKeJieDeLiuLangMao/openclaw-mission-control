@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from pydantic import Field
 
-from mem0.configs.rerankers.base import BaseRerankerConfig
+from app.memory.configs.rerankers.base import BaseRerankerConfig
 
 
 class LLMRerankerConfig(BaseRerankerConfig):

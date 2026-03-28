@@ -9,8 +9,8 @@ except ImportError:
 
 from pydantic import BaseModel
 
-from mem0.configs.vector_stores.elasticsearch import ElasticsearchConfig
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.configs.vector_stores.elasticsearch import ElasticsearchConfig
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

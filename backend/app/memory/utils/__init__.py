@@ -10,13 +10,12 @@ import os
 import socket
 from typing import Any, Optional
 
-from app.memory import Memory
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.memory.models import Turn, VectorMemory
 
-_memory_client: Optional[Memory] = None
+_memory_client: Optional[Any] = None
 _config_hash: Optional[str] = None
 
 
@@ -207,7 +206,7 @@ def _parse_environment_variables(config_dict: dict) -> dict:
     return config_dict
 
 
-def get_memory_client() -> Optional[Memory]:
+def get_memory_client() -> Optional[Any]:
     """
     Get or initialize the Mem0 client.
 
@@ -232,6 +231,7 @@ def get_memory_client() -> Optional[Memory]:
         current_config_hash = _get_config_hash(config)
 
         if _memory_client is None or _config_hash != current_config_hash:
+            from app.memory.memory.main import Memory
             _memory_client = Memory.from_config(config_dict=config)
             _config_hash = current_config_hash
 
@@ -239,7 +239,9 @@ def get_memory_client() -> Optional[Memory]:
 
     except Exception as e:
         import logging
+        import traceback
         logging.error(f"Failed to initialize memory client: {e}")
+        logging.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 

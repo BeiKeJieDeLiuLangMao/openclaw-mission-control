@@ -14,8 +14,8 @@ from databricks.sdk.service.vectorsearch import (
     EmbeddingVectorColumn,
 )
 from pydantic import BaseModel
-from mem0.memory.utils import extract_json
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.memory.utils import extract_json
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

@@ -3,8 +3,8 @@ from typing import Dict, List, Optional
 
 from openai import OpenAI
 
-from mem0.configs.llms.base import BaseLlmConfig
-from mem0.llms.base import LLMBase
+from app.memory.configs.llms.base import BaseLlmConfig
+from app.memory.llms.base import LLMBase
 
 
 class XAILLM(LLMBase):

@@ -11,7 +11,7 @@ except ImportError:
 
 from pydantic import BaseModel
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

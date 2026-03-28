@@ -1,7 +1,7 @@
 from typing import Optional, Literal
 
-from mem0.embeddings.base import EmbeddingBase
-from mem0.configs.embeddings.base import BaseEmbedderConfig
+from app.memory.embeddings.base import EmbeddingBase
+from app.memory.configs.embeddings.base import BaseEmbedderConfig
 
 try:
     from fastembed import TextEmbedding

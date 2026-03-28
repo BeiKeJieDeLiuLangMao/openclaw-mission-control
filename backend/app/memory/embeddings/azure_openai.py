@@ -4,8 +4,8 @@ from typing import Literal, Optional
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
-from mem0.configs.embeddings.base import BaseEmbedderConfig
-from mem0.embeddings.base import EmbeddingBase
+from app.memory.configs.embeddings.base import BaseEmbedderConfig
+from app.memory.embeddings.base import EmbeddingBase
 
 SCOPE = "https://cognitiveservices.azure.com/.default"
 

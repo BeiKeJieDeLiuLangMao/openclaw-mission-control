@@ -4,10 +4,10 @@ from typing import Dict, List, Optional, Union
 
 from openai import OpenAI
 
-from mem0.configs.llms.base import BaseLlmConfig
-from mem0.configs.llms.minimax import MinimaxConfig
-from mem0.llms.base import LLMBase
-from mem0.memory.utils import extract_json
+from app.memory.configs.llms.base import BaseLlmConfig
+from app.memory.configs.llms.minimax import MinimaxConfig
+from app.memory.llms.base import LLMBase
+from app.memory.memory.utils import extract_json
 
 
 class MiniMaxLLM(LLMBase):

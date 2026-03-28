@@ -7,11 +7,11 @@ from typing import Any, Dict, List, Optional, Union
 import httpx
 import requests
 
-from mem0.client.project import AsyncProject, Project
-from mem0.client.utils import api_error_handler
+from app.memory.client.project import AsyncProject, Project
+from app.memory.client.utils import api_error_handler
 # Exception classes are referenced in docstrings only
-from mem0.memory.setup import get_user_id, setup_config
-from mem0.memory.telemetry import capture_client_event
+from app.memory.memory.setup import get_user_id, setup_config
+from app.memory.memory.telemetry import capture_client_event
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ except ImportError:
         "Pinecone requires extra dependencies. Install with `pip install pinecone pinecone-text`"
     ) from None
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

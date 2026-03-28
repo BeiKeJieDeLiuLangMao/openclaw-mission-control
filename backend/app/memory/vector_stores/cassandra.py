@@ -15,7 +15,7 @@ except ImportError:
         "Please install it using 'pip install cassandra-driver'"
     )
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

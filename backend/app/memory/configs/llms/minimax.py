@@ -1,6 +1,6 @@
 from typing import Optional
 
-from mem0.configs.llms.base import BaseLlmConfig
+from app.memory.configs.llms.base import BaseLlmConfig
 
 
 class MinimaxConfig(BaseLlmConfig):

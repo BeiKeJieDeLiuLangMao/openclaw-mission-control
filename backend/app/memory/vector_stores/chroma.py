@@ -9,7 +9,7 @@ try:
 except ImportError:
     raise ImportError("The 'chromadb' library is required. Please install it using 'pip install chromadb'.")
 
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.vector_stores.base import VectorStoreBase
 
 logger = logging.getLogger(__name__)
 

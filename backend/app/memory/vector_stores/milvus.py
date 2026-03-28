@@ -3,8 +3,8 @@ from typing import Dict, Optional
 
 from pydantic import BaseModel
 
-from mem0.configs.vector_stores.milvus import MetricType
-from mem0.vector_stores.base import VectorStoreBase
+from app.memory.configs.vector_stores.milvus import MetricType
+from app.memory.vector_stores.base import VectorStoreBase
 
 try:
     import pymilvus  # noqa: F401
